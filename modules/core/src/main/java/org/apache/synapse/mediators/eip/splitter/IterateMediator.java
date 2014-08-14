@@ -19,6 +19,9 @@
 
 package org.apache.synapse.mediators.eip.splitter;
 
+import java.util.Iterator;
+import java.util.List;
+
 import org.apache.axiom.om.OMElement;
 import org.apache.axiom.om.OMNode;
 import org.apache.axiom.soap.SOAPEnvelope;
@@ -29,6 +32,8 @@ import org.apache.synapse.ContinuationState;
 import org.apache.synapse.ManagedLifecycle;
 import org.apache.synapse.MessageContext;
 import org.apache.synapse.SynapseLog;
+import org.apache.synapse.commons.json.JsonUtil;
+import org.apache.synapse.config.xml.SynapsePath;
 import org.apache.synapse.continuation.ContinuationStackManager;
 import org.apache.synapse.core.SynapseEnvironment;
 import org.apache.synapse.core.axis2.Axis2MessageContext;
@@ -42,9 +47,6 @@ import org.apache.synapse.mediators.eip.Target;
 import org.apache.synapse.util.MessageHelper;
 import org.apache.synapse.util.xpath.SynapseXPath;
 import org.jaxen.JaxenException;
-
-import java.util.Iterator;
-import java.util.List;
 
 /**
  * Splits a message using an XPath expression and creates a new message to hold
@@ -64,14 +66,14 @@ public class IterateMediator extends AbstractMediator implements ManagedLifecycl
      */
     private boolean preservePayload = false;
 
-    /** The XPath that will list the elements to be splitted */
-    private SynapseXPath expression = null;
+    /** The Path that will list the elements to be splitted */
+    private SynapsePath expression = null;
 
     /**
-     * An XPath expression that specifies where the splitted elements should be attached when
+     * An Path expression that specifies where the splitted elements should be attached when
      * the payload is being preserved
      */
-    private SynapseXPath attachPath = null;
+    private SynapsePath attachPath = null;
 
     /** The target for the newly splitted messages */
     private Target target = null;
@@ -99,53 +101,72 @@ public class IterateMediator extends AbstractMediator implements ManagedLifecycl
         }
 
         try {
-            // get a copy of the message for the processing, if the continueParent is set to true
-            // this original message can go in further mediations and hence we should not change
-            // the original message context
-            SOAPEnvelope envelope = MessageHelper.cloneSOAPEnvelope(synCtx.getEnvelope());
-
-            // get the iteration elements and iterate through the list,
-            // this call will also detach all the iteration elements 
-            List splitElements = EIPUtils.getDetachedMatchingElements(envelope, synCtx, expression);
-
-            if (synLog.isTraceOrDebugEnabled()) {
-                synLog.traceOrDebug("Splitting with XPath : " + expression + " resulted in " +
-                    splitElements.size() + " elements");
-            }
-
-            // if not preservePayload remove all the child elements
-            if (!preservePayload && envelope.getBody() != null) {
-                for (Iterator itr = envelope.getBody().getChildren(); itr.hasNext();) {
-                    ((OMNode) itr.next()).detach();
-                }
-            }
-
-            int msgCount = splitElements.size();
-            int msgNumber = 0;
-
-            // iterate through the list
-            for (Object o : splitElements) {
-
-                // for the moment iterator will look for an OMNode as the iteration element
-                if (!(o instanceof OMNode)) {
-                    handleException("Error splitting message with XPath : "
-                        + expression + " - result not an OMNode", synCtx);
-                }
-
+        	// If the expression is an instance of SynapseXpath then XML version will be used. Otherwise JSON Stream will be used.
+        	if(expression!=null && expression instanceof SynapseXPath){
+                // get a copy of the message for the processing, if the continueParent is set to true
+                // this original message can go in further mediations and hence we should not change
+                // the original message context
+                SOAPEnvelope envelope = MessageHelper.cloneSOAPEnvelope(synCtx.getEnvelope());
+    
+                // get the iteration elements and iterate through the list,
+                // this call will also detach all the iteration elements 
+                List splitElements = EIPUtils.getDetachedMatchingElements(envelope, synCtx, (SynapseXPath)expression); // TODO Check
+    
                 if (synLog.isTraceOrDebugEnabled()) {
-                    synLog.traceOrDebug(
-                            "Submitting " + (msgNumber+1) + " of " + msgNumber +
-                            (target.isAsynchronous() ? " messages for processing in parallel" :
-                             " messages for processing in sequentially"));
+                    synLog.traceOrDebug("Splitting with XPath : " + expression + " resulted in " +
+                        splitElements.size() + " elements");
                 }
-
-                MessageContext itereatedMsgCtx =
-                        getIteratedMessage(synCtx, msgNumber++, msgCount, envelope, (OMNode) o);
-                ContinuationStackManager.
-                        addReliantContinuationState(itereatedMsgCtx, 0, getMediatorPosition());
-                target.mediate(itereatedMsgCtx);
-            }
-
+    
+                // if not preservePayload remove all the child elements
+                if (!preservePayload && envelope.getBody() != null) {
+                    for (Iterator itr = envelope.getBody().getChildren(); itr.hasNext();) {
+                        ((OMNode) itr.next()).detach();
+                    }
+                }
+    
+                int msgCount = splitElements.size();
+                int msgNumber = 0;
+    
+                // iterate through the list
+                for (Object o : splitElements) {
+    
+                    // for the moment iterator will look for an OMNode as the iteration element
+                    if (!(o instanceof OMNode)) {
+                        handleException("Error splitting message with XPath : "
+                            + expression + " - result not an OMNode", synCtx);
+                    }
+    
+                    if (synLog.isTraceOrDebugEnabled()) {
+                        synLog.traceOrDebug(
+                                "Submitting " + (msgNumber+1) + " of " + msgNumber +
+                                (target.isAsynchronous() ? " messages for processing in parallel" :
+                                 " messages for processing in sequentially"));
+                    }
+    
+                    MessageContext itereatedMsgCtx =
+                            getIteratedMessage(synCtx, msgNumber++, msgCount, envelope, (OMNode) o);
+                    ContinuationStackManager.
+                            addReliantContinuationState(itereatedMsgCtx, 0, getMediatorPosition());
+                    target.mediate(itereatedMsgCtx);
+                }
+        	}else{
+        		// SynapseJSONPath implementation read the JSON stream and execute the JSON path.
+        		Object resultValue = null;
+				if (expression != null)
+					resultValue = expression.evaluate(synCtx);
+				
+				int msgNumber = 0;
+				int msgCount=0;
+				if(resultValue!=null && resultValue instanceof List){
+					List list=(List)resultValue;
+					for (int i = 0; i < list.size(); i++) {
+						MessageContext itereatedMsgCtx = getIteratedMessage(synCtx, msgNumber++, msgCount, list.get(i).toString());
+						ContinuationStackManager.addReliantContinuationState(itereatedMsgCtx, 0, getMediatorPosition());
+						target.mediate(itereatedMsgCtx);
+					}
+				}
+        	
+        	}
         } catch (JaxenException e) {
             handleException("Error evaluating split XPath expression : " + expression, e, synCtx);
         } catch (AxisFault af) {
@@ -185,6 +206,30 @@ public class IterateMediator extends AbstractMediator implements ManagedLifecycl
         }
         return result;
     }
+    
+    private MessageContext getIteratedMessage(MessageContext synCtx, int msgNumber, int msgCount, String node) throws AxisFault, JaxenException {
+    	// clone the message for the mediation in iteration
+        MessageContext newCtx = MessageHelper.cloneMessageContext(synCtx);
+
+        if (id != null) {
+            // set the parent correlation details to the cloned MC -
+            //                              for the use of aggregation like tasks
+            newCtx.setProperty(EIPConstants.AGGREGATE_CORRELATION + "." + id,
+                    synCtx.getMessageID());
+            // set the messageSequence property for possibal aggreagtions
+            newCtx.setProperty(
+                    EIPConstants.MESSAGE_SEQUENCE + "." + id,
+                    msgNumber + EIPConstants.MESSAGE_SEQUENCE_DELEMITER + msgCount);
+        } else {
+            newCtx.setProperty(
+                    EIPConstants.MESSAGE_SEQUENCE,
+                    msgNumber + EIPConstants.MESSAGE_SEQUENCE_DELEMITER + msgCount);
+        }
+        // write the new JSON message to the stream
+        JsonUtil.newJsonPayload(((Axis2MessageContext) newCtx).getAxis2MessageContext(), node, true, true);
+        return newCtx;
+    }
+    
 
     /**
      * Create a new message context using the given original message context, the envelope
@@ -227,7 +272,7 @@ public class IterateMediator extends AbstractMediator implements ManagedLifecycl
         // node specified by the attachPath
         if (preservePayload) {
 
-            Object attachElem = attachPath.evaluate(newEnvelope, synCtx);
+            Object attachElem = attachPath.evaluate(newEnvelope); // TODO check
             if (attachElem != null &&
                 attachElem instanceof List && !((List) attachElem).isEmpty()) {
                 attachElem = ((List) attachElem).get(0);
@@ -276,19 +321,19 @@ public class IterateMediator extends AbstractMediator implements ManagedLifecycl
         this.preservePayload = preservePayload;
     }
 
-    public SynapseXPath getExpression() {
+    public SynapsePath getExpression() {
         return expression;
     }
 
-    public void setExpression(SynapseXPath expression) {
+    public void setExpression(SynapsePath expression) {
         this.expression = expression;
     }
 
-    public SynapseXPath getAttachPath() {
+    public SynapsePath getAttachPath() {
         return attachPath;
     }
 
-    public void setAttachPath(SynapseXPath attachPath) {
+    public void setAttachPath(SynapsePath attachPath) {
         this.attachPath = attachPath;
     }
 

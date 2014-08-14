@@ -18,7 +18,14 @@
  */
 package org.apache.synapse.util.xpath;
 
-import com.jayway.jsonpath.JsonPath;
+import java.io.IOException;
+import java.io.InputStream;
+import java.util.ArrayList;
+import java.util.List;
+
+import net.minidev.json.JSONArray;
+import net.minidev.json.JSONObject;
+
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -30,7 +37,7 @@ import org.apache.synapse.config.xml.SynapsePath;
 import org.apache.synapse.core.axis2.Axis2MessageContext;
 import org.jaxen.JaxenException;
 
-import java.io.*;
+import com.jayway.jsonpath.JsonPath;
 
 public class SynapseJsonPath extends SynapsePath {
 
@@ -132,5 +139,87 @@ public class SynapseJsonPath extends SynapsePath {
 
     public void setJsonPathExpression(String jsonPathExpression) {
         this.expression = jsonPathExpression;
+    }
+    
+    /**
+     * Read the JSON Stream and returns a list of string representations of return JSON elements from JSON path.
+     */
+	@Override
+	public Object evaluate(Object object) throws JaxenException {
+		List result = null;
+		MessageContext synCtx = null;
+		if (object != null && object instanceof MessageContext) {
+			synCtx = (MessageContext) object;
+			result = listValueOf(synCtx);
+		}
+		if (result == null)
+			result = new ArrayList();
+		return result;
+	}
+    
+    /* 
+     * Read JSON stream and return and object
+     */
+	public List listValueOf(MessageContext synCtx) {
+		org.apache.axis2.context.MessageContext amc = ((Axis2MessageContext) synCtx).getAxis2MessageContext();
+		InputStream stream;
+		if (!JsonUtil.hasAJsonPayload(amc) || "true".equals(enableStreamingJsonPath)) {
+			try {
+				if (null == amc.getEnvelope().getBody().getFirstElement()) {
+					// Get message from PT Pipe.
+					stream = getMessageInputStreamPT(amc);
+					if (stream == null) {
+						stream = JsonUtil.getJsonPayload(amc);
+					} else {
+						JsonUtil.newJsonPayload(amc, stream, true, true);
+					}
+				} else {
+					// Message Already built.
+					stream = JsonUtil.toJsonStream(amc.getEnvelope().getBody().getFirstElement());
+				}
+				return listValueOf(stream);
+			} catch (IOException e) {
+				handleException("Could not find JSON Stream in PassThrough Pipe during JSON path evaluation.",
+				                e);
+			}
+		} else {
+			stream = JsonUtil.getJsonPayload(amc);
+			return listValueOf(stream);
+		}
+		return null;
+
+	}
+	
+	public List listValueOf(final InputStream jsonStream) {
+        if (jsonStream == null) {
+            return null;
+        }
+        List result=new ArrayList();
+        Object object;
+        try {
+        	object = jsonPath.read(jsonStream);
+            if (log.isDebugEnabled()) {
+                log.debug("#listValueOf. Evaluated JSON path <" + jsonPath.getPath() + "> : <" + (object == null ? null : object.toString()) + ">");
+            }
+            
+            if(object !=null){
+            	if(object instanceof JSONArray){
+                	JSONArray arr = (JSONArray)object;
+                	for (Object obj : arr) {
+                		result.add(obj!=null?obj:"null");
+                    }
+            	}else if(object instanceof JSONObject){
+            		result.add(object);
+            	}
+            }
+        } catch (IOException e) {
+            handleException("Error evaluating JSON Path <" + jsonPath.getPath() + ">", e);
+        } catch (Exception e) { // catch invalid json paths that do not match with the existing JSON payload.
+            log.error("#listValueOf. Error evaluating JSON Path <" + jsonPath.getPath() + ">. Returning empty result. Error>>> " + e.getLocalizedMessage());
+        }
+        if (log.isDebugEnabled()) {
+            log.debug("#listValueOf. Evaluated JSON path <" + jsonPath.getPath() + "> : <null>.");
+        }
+        return result;
     }
 }
