@@ -297,7 +297,7 @@ public class AggregateMediator extends AbstractMediator implements ManagedLifecy
             // if there is an aggregate continue on aggregation
             if (aggregate != null) {
             	//this is a temporary fix           	
-                synCtx.getEnvelope().build();
+                //synCtx.getEnvelope().build();
                 boolean collected = aggregate.addMessage(synCtx);
                 if (synLog.isTraceOrDebugEnabled()) {
                     if (collected) {
@@ -471,8 +471,7 @@ public class AggregateMediator extends AbstractMediator implements ManagedLifecy
                     }
 
                     if(aggregationExpression instanceof SynapseXPath){
-                    EIPUtils.enrichEnvelope(
-                            newCtx.getEnvelope(), synCtx.getEnvelope(), synCtx, (SynapseXPath)aggregationExpression); // TODO Check the instance
+                    	EIPUtils.enrichEnvelope(newCtx.getEnvelope(), synCtx.getEnvelope(), synCtx, (SynapseXPath)aggregationExpression);
 
                     }else if(aggregationExpression instanceof SynapseJsonPath){
                     	EIPUtils.enrichJSONStream(newCtx, synCtx, (SynapseJsonPath)aggregationExpression);

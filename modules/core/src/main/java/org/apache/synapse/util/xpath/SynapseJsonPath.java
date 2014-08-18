@@ -25,6 +25,7 @@ import java.util.List;
 
 import net.minidev.json.JSONArray;
 import net.minidev.json.JSONObject;
+import net.minidev.json.ParentAware;
 
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.logging.Log;
@@ -38,6 +39,7 @@ import org.apache.synapse.core.axis2.Axis2MessageContext;
 import org.jaxen.JaxenException;
 
 import com.jayway.jsonpath.JsonPath;
+import com.jayway.jsonpath.internal.PathTokenizer;
 
 public class SynapseJsonPath extends SynapsePath {
 
@@ -222,4 +224,47 @@ public class SynapseJsonPath extends SynapsePath {
         }
         return result;
     }
+	
+	public Object findParent(Object rootObject){
+		PathTokenizer tokenizer=new PathTokenizer(jsonPath.getPath());
+		tokenizer.removeLastPathToken();
+		StringBuilder sb=new StringBuilder();
+		List<String> fragments=tokenizer.getFragments();
+		for(int i=0;i<fragments.size();i++){
+			sb.append(fragments.get(i));
+			if(i<fragments.size()-1)
+				sb.append(".");
+		}
+		JsonPath tempPath=JsonPath.compile(sb.toString());
+		return tempPath.find(rootObject);
+	}
+	
+	// TODO Jsonpath should expose internal package to OSGI. because I'm using pathtokenizer here
+	// TODO Json smart should me modified. Add ParentAware again
+	public Object append(Object rootObject, Object parent, Object child){
+		if(rootObject!=null && rootObject.equals(parent)){
+			JSONArray array=new JSONArray();
+			array.add(rootObject);
+			rootObject = array;
+			parent=array;
+		}
+		if(parent !=null && parent instanceof JSONArray){
+			((JSONArray)parent).add(child);
+		}else if(parent!=null && parent instanceof JSONObject){
+			ParentAware newParent=((JSONObject)parent).getParent();
+			if(newParent!=null && newParent instanceof JSONObject){
+				JSONObject obj=(JSONObject)newParent;
+				for(String key:obj.keySet()){
+					if(obj.get(key).equals(parent)){
+						JSONArray array=new JSONArray();
+						array.add(obj.get(key));
+						array.add(child);
+						obj.put(key, array);
+						break;
+					}
+				}
+			}
+		}
+		return rootObject;
+	}
 }

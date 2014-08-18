@@ -23,9 +23,6 @@ import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 
-import net.minidev.json.JSONArray;
-import net.minidev.json.JSONObject;
-
 import org.apache.axiom.om.OMElement;
 import org.apache.axiom.om.OMNode;
 import org.apache.axiom.soap.SOAPEnvelope;
@@ -164,81 +161,29 @@ public class EIPUtils {
     }
     
     public static void enrichJSONStream(MessageContext messageContext, MessageContext enricherContext, SynapseJsonPath expression) throws JaxenException{
-    	Object root=null;
     	Object newItemsObj=expression.evaluate(enricherContext);
-    	if(newItemsObj!=null && newItemsObj instanceof List){
-    		Object parent=null;
+    	if(newItemsObj!=null && newItemsObj instanceof List && !((List)newItemsObj).isEmpty()){
     		// find root element
     		Object objectList = rootJsonPath.evaluate(messageContext);
     		if (objectList != null && objectList instanceof List) {
     			List list = (List) objectList;
-    			if (list != null && !list.isEmpty())
-    				root = list.get(0);
+    			if (list != null && !list.isEmpty()){
+    				Object root = list.get(0);
+        			// find existing 0th item from the stream
+            		Object parent = expression.findParent(root);
+            		// Iterate through new elements and add to parent element
+            		
+            		if(parent!=null){
+                    	for(Object item:(List)newItemsObj){
+                    		root = expression.append(root, parent, item);
+                    	}
+                    	// write the new JSON message to the stream
+                    	JsonUtil.newJsonPayload(((Axis2MessageContext) messageContext).getAxis2MessageContext(), root.toString(), true, true);
+                   	}
+    			}
     		}
-    		// find existing 0th item from the stream
-    		Object existingItemsObj = expression.evaluate(messageContext);
-        	if(existingItemsObj!=null && existingItemsObj instanceof List){
-        		List existingItems=(List)existingItemsObj;
-        		if(!existingItems.isEmpty()){
-        			Object o = existingItems.get(0);
-        			parent=findParent(messageContext, o);
-        		}
-        	}
-        	// Iterate through new elements and add to parent element
-        	if(parent!=null && parent instanceof JSONArray){
-            	for(Object item:(List)newItemsObj){
-            		((JSONArray)parent).add(item);
-            	}
-        	}
     	}
-    	// write the new JSON message to the stream
-    	JsonUtil.newJsonPayload(((Axis2MessageContext) messageContext).getAxis2MessageContext(), root.toString(), true, true);
     }
-    
-	private static Object findParent(MessageContext messageContext, Object element) throws JaxenException {
-		Object parent = null;
-		Object oList = rootJsonPath.evaluate(messageContext);
-		if (oList != null && oList instanceof List) {
-			Object o = null;
-			List list = (List) oList;
-			if (list != null && !list.isEmpty())
-				o = list.get(0);
-			parent = findParent(o, element);
-		}
-		return parent;
-	}
-    
-	private static Object findParent(Object root, Object element) throws JaxenException {
-		Object parent = null;
-		if (root != null && element != null) {
-			if (root instanceof JSONArray) {
-				JSONArray arr = (JSONArray) root;
-				for (int i = 0; i < arr.size(); i++) {
-					if (arr.get(i) != null) {
-						if (arr.get(i).equals(element)) {
-							parent = arr;
-							break;
-						} else {
-							parent = findParent(arr.get(i), element);
-						}
-					}
-				}
-			} else if (root instanceof JSONObject) {
-				JSONObject obj = (JSONObject) root;
-				for (Object key : obj.keySet()) {
-					if (obj.get(key) != null) {
-						if (obj.get(key).equals(element)) {
-							parent = obj;
-							break;
-						} else {
-							parent = findParent(obj.get(key), element);
-						}
-					}
-				}
-			}
-		}
-		return parent;
-	}
 
     private static boolean isBody(OMElement body, OMElement enrichingElement) {
         try {
