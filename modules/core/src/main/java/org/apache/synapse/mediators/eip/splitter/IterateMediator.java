@@ -159,6 +159,7 @@ public class IterateMediator extends AbstractMediator implements ManagedLifecycl
 				int msgCount=0;
 				if(resultValue!=null && resultValue instanceof List){
 					List list=(List)resultValue;
+					msgCount=list.size();
 					for (int i = 0; i < list.size(); i++) {
 						MessageContext itereatedMsgCtx = getIteratedMessage(synCtx, msgNumber++, msgCount, list.get(i).toString());
 						ContinuationStackManager.addReliantContinuationState(itereatedMsgCtx, 0, getMediatorPosition());

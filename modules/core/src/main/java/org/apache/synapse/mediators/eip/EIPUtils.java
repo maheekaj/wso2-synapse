@@ -169,7 +169,7 @@ public class EIPUtils {
     			List list = (List) objectList;
     			if (list != null && !list.isEmpty()){
     				Object root = list.get(0);
-        			// find existing 0th item from the stream
+        			// find existing 0th item from the stream TODO check duplicate array know issue dosn't work with most child node
             		Object parent = expression.findParent(root);
             		// Iterate through new elements and add to parent element
             		

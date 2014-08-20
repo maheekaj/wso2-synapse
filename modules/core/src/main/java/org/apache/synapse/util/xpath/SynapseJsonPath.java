@@ -162,7 +162,7 @@ public class SynapseJsonPath extends SynapsePath {
     /* 
      * Read JSON stream and return and object
      */
-	public List listValueOf(MessageContext synCtx) {
+	private List listValueOf(MessageContext synCtx) {
 		org.apache.axis2.context.MessageContext amc = ((Axis2MessageContext) synCtx).getAxis2MessageContext();
 		InputStream stream;
 		if (!JsonUtil.hasAJsonPayload(amc) || "true".equals(enableStreamingJsonPath)) {
@@ -192,7 +192,7 @@ public class SynapseJsonPath extends SynapsePath {
 
 	}
 	
-	public List listValueOf(final InputStream jsonStream) {
+	private List listValueOf(final InputStream jsonStream) {
         if (jsonStream == null) {
             return null;
         }
@@ -210,7 +210,7 @@ public class SynapseJsonPath extends SynapsePath {
                 	for (Object obj : arr) {
                 		result.add(obj!=null?obj:"null");
                     }
-            	}else if(object instanceof JSONObject){
+            	}else{
             		result.add(object);
             	}
             }
@@ -225,22 +225,52 @@ public class SynapseJsonPath extends SynapsePath {
         return result;
     }
 	
+	/**
+	 * This method will evaluate the JSON expression and return the first parent object matching object.
+	 * @param rootObject Root JSON Object or Array to evaluate
+	 * @return Parent object of the evaluation result
+	 */
 	public Object findParent(Object rootObject){
-		PathTokenizer tokenizer=new PathTokenizer(jsonPath.getPath());
-		tokenizer.removeLastPathToken();
-		StringBuilder sb=new StringBuilder();
-		List<String> fragments=tokenizer.getFragments();
-		for(int i=0;i<fragments.size();i++){
-			sb.append(fragments.get(i));
-			if(i<fragments.size()-1)
-				sb.append(".");
+		Object parent=null;
+		Object obj=jsonPath.find(rootObject);
+		if(obj!=null && obj instanceof ParentAware){
+			parent=((ParentAware)obj).getParent();
+		}else{
+    		PathTokenizer tokenizer=new PathTokenizer(jsonPath.getPath());
+    		tokenizer.removeLastPathToken();
+    		StringBuilder sb=new StringBuilder();
+    		List<String> fragments=tokenizer.getFragments();
+    		for(int i=0;i<fragments.size();i++){
+    			sb.append(fragments.get(i));
+    			if(i<fragments.size()-1)
+    				sb.append(".");
+    		}
+    		JsonPath tempPath=JsonPath.compile(sb.toString());
+    		parent= tempPath.find(rootObject);
 		}
-		JsonPath tempPath=JsonPath.compile(sb.toString());
-		return tempPath.find(rootObject);
+		return parent;
 	}
 	
-	// TODO Jsonpath should expose internal package to OSGI. because I'm using pathtokenizer here
-	// TODO Json smart should me modified. Add ParentAware again
+	/**
+	 * This method will insert given child Object (JSONObject or JSONArray) to the matching path of the root object. Updated root object will be return back to the caller.
+	 * 
+	 * @param rootObject Root JSON Object or Array
+	 * @param child new JSON object to be insert
+	 * @return Updated Root Object
+	 */
+	public Object append(Object rootObject,Object child){
+		Object parent=findParent(rootObject);
+		return append(rootObject, parent, child);
+	}
+	
+	/**
+	 * This method will insert given child Object (JSONObject or JSONArray) to given parent object. Updated root object will be return back to the caller.
+	 * 
+	 * @param rootObject Root JSON Object or Array
+	 * @param parent Parent JSON Object or Array
+	 * @param child New item to insert
+	 * @return Updated Root Object
+	 */
 	public Object append(Object rootObject, Object parent, Object child){
 		if(rootObject!=null && rootObject.equals(parent)){
 			JSONArray array=new JSONArray();
@@ -251,15 +281,68 @@ public class SynapseJsonPath extends SynapsePath {
 		if(parent !=null && parent instanceof JSONArray){
 			((JSONArray)parent).add(child);
 		}else if(parent!=null && parent instanceof JSONObject){
-			ParentAware newParent=((JSONObject)parent).getParent();
-			if(newParent!=null && newParent instanceof JSONObject){
-				JSONObject obj=(JSONObject)newParent;
-				for(String key:obj.keySet()){
-					if(obj.get(key).equals(parent)){
-						JSONArray array=new JSONArray();
-						array.add(obj.get(key));
-						array.add(child);
-						obj.put(key, array);
+			Object currentChild=jsonPath.find(rootObject);
+			if(currentChild!=null){
+				if(currentChild instanceof JSONArray){
+					rootObject = append(rootObject, currentChild, child);
+				}else{
+					JSONObject obj=(JSONObject)parent;
+    				for(String key:obj.keySet()){
+    					if(currentChild.equals(obj.get(key))){
+    						JSONArray array=new JSONArray();
+    						array.add(currentChild);
+    						obj.put(key, array);
+    						rootObject = append(rootObject, array, child);
+    					}
+    				}
+				}
+			}
+		}
+		return rootObject;
+	}
+	
+	/**
+	 * This method will remove given child object from the given parent object. Updated rootObject will be return back to the caller
+	 * @param rootObject Root JSON Object or Array
+	 * @param parent Parent JSON Object or Array
+	 * @param child item to remove
+	 * @return Updated Root Object
+	 */
+	public Object remove(Object rootObject, Object parent, Object child){
+		if(parent !=null && parent instanceof JSONArray){
+			((JSONArray)parent).remove(child);
+		}else if(parent!=null && parent instanceof JSONObject){
+			if(((JSONObject)parent).containsValue(child)){
+				for(String key:((JSONObject)parent).keySet()){
+					if(child.equals(((JSONObject)parent).get(key))){
+						((JSONObject)parent).remove(key);
+						break;
+					}
+				}
+			}
+		}
+		return rootObject;
+	}
+	
+	
+	/**
+	 * This method will be replace first matching item with given child object. Updated root object will be return back to the caller
+	 * @param rootObject Root JSON Object or Array
+	 * @param newChild New item to replace
+	 * @return Updated Root Object
+	 */
+	public Object replace(Object rootObject, Object newChild){
+		Object child=jsonPath.find(rootObject);
+		Object parent=findParent(rootObject);
+		if(parent !=null && parent instanceof JSONArray){
+			((JSONArray)parent).remove(child);
+			((JSONArray)parent).add(newChild);
+		}else if(parent!=null && parent instanceof JSONObject){
+			if(((JSONObject)parent).containsValue(child)){
+				for(String key:((JSONObject)parent).keySet()){
+					if(child.equals(((JSONObject)parent).get(key))){
+						((JSONObject)parent).remove(key);
+						((JSONObject)parent).put(key, newChild);
 						break;
 					}
 				}
