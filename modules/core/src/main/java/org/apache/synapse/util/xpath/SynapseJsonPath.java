@@ -22,10 +22,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.List;
-
-import net.minidev.json.JSONArray;
-import net.minidev.json.JSONObject;
-import net.minidev.json.ParentAware;
+import java.util.Map;
 
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.logging.Log;
@@ -205,8 +202,8 @@ public class SynapseJsonPath extends SynapsePath {
             }
             
             if(object !=null){
-            	if(object instanceof JSONArray){
-                	JSONArray arr = (JSONArray)object;
+            	if(object instanceof List){
+            		List arr = (List)object;
                 	for (Object obj : arr) {
                 		result.add(obj!=null?obj:"null");
                     }
@@ -225,6 +222,10 @@ public class SynapseJsonPath extends SynapsePath {
         return result;
     }
 	
+	public Object find(Object rootObject){
+		return jsonPath.find(rootObject);
+	}
+	
 	/**
 	 * This method will evaluate the JSON expression and return the first parent object matching object.
 	 * @param rootObject Root JSON Object or Array to evaluate
@@ -232,22 +233,17 @@ public class SynapseJsonPath extends SynapsePath {
 	 */
 	public Object findParent(Object rootObject){
 		Object parent=null;
-		Object obj=jsonPath.find(rootObject);
-		if(obj!=null && obj instanceof ParentAware){
-			parent=((ParentAware)obj).getParent();
-		}else{
-    		PathTokenizer tokenizer=new PathTokenizer(jsonPath.getPath());
-    		tokenizer.removeLastPathToken();
-    		StringBuilder sb=new StringBuilder();
-    		List<String> fragments=tokenizer.getFragments();
-    		for(int i=0;i<fragments.size();i++){
-    			sb.append(fragments.get(i));
-    			if(i<fragments.size()-1)
-    				sb.append(".");
-    		}
-    		JsonPath tempPath=JsonPath.compile(sb.toString());
-    		parent= tempPath.find(rootObject);
+		PathTokenizer tokenizer=new PathTokenizer(jsonPath.getPath());
+		tokenizer.removeLastPathToken();
+		StringBuilder sb=new StringBuilder();
+		List<String> fragments=tokenizer.getFragments();
+		for(int i=0;i<fragments.size();i++){
+			sb.append(fragments.get(i));
+			if(i<fragments.size()-1)
+				sb.append(".");
 		}
+		JsonPath tempPath=JsonPath.compile(sb.toString());
+		parent= tempPath.find(rootObject);
 		return parent;
 	}
 	
@@ -258,8 +254,13 @@ public class SynapseJsonPath extends SynapsePath {
 	 * @param child new JSON object to be insert
 	 * @return Updated Root Object
 	 */
-	public Object append(Object rootObject,Object child){
+	public Object appendToParent(Object rootObject, Object child){
 		Object parent=findParent(rootObject);
+        return append(rootObject, parent, child);
+	}
+	
+	public Object append(Object rootObject, Object child){
+		Object parent=jsonPath.find(rootObject);
 		return append(rootObject, parent, child);
 	}
 	
@@ -272,30 +273,34 @@ public class SynapseJsonPath extends SynapsePath {
 	 * @return Updated Root Object
 	 */
 	public Object append(Object rootObject, Object parent, Object child){
-		if(rootObject!=null && rootObject.equals(parent)){
-			JSONArray array=new JSONArray();
-			array.add(rootObject);
-			rootObject = array;
-			parent=array;
-		}
-		if(parent !=null && parent instanceof JSONArray){
-			((JSONArray)parent).add(child);
-		}else if(parent!=null && parent instanceof JSONObject){
-			Object currentChild=jsonPath.find(rootObject);
-			if(currentChild!=null){
-				if(currentChild instanceof JSONArray){
-					rootObject = append(rootObject, currentChild, child);
-				}else{
-					JSONObject obj=(JSONObject)parent;
-    				for(String key:obj.keySet()){
-    					if(currentChild.equals(obj.get(key))){
-    						JSONArray array=new JSONArray();
-    						array.add(currentChild);
-    						obj.put(key, array);
-    						rootObject = append(rootObject, array, child);
-    					}
-    				}
-				}
+		if(parent !=null && parent instanceof List){
+            ((List)parent).add(child);
+        }else if(parent!=null && parent instanceof Map){
+        	parent=findParent(rootObject);
+            Object currentChild=jsonPath.find(rootObject);
+            if(parent !=null && currentChild!=null){
+                Map obj=(Map)parent;
+                for(Object key:obj.keySet()){
+                    if(currentChild.equals(obj.get(key))){
+                    	rootObject = appendToObject(rootObject, obj, key, child);
+                    }
+                }
+            }
+        }
+        return rootObject;
+	}
+	
+	private Object appendToObject(Object rootObject, Map parent, Object key, Object child){
+		if(parent!=null && parent.containsKey(key)){
+			Object existingValue=parent.get(key);
+			if(existingValue instanceof List){
+				List array=(List)existingValue;
+				array.add(child);
+			}else{
+				List array=new ArrayList();
+				array.add(existingValue);
+				array.add(child);
+				parent.put(key, array);
 			}
 		}
 		return rootObject;
@@ -309,13 +314,13 @@ public class SynapseJsonPath extends SynapsePath {
 	 * @return Updated Root Object
 	 */
 	public Object remove(Object rootObject, Object parent, Object child){
-		if(parent !=null && parent instanceof JSONArray){
-			((JSONArray)parent).remove(child);
-		}else if(parent!=null && parent instanceof JSONObject){
-			if(((JSONObject)parent).containsValue(child)){
-				for(String key:((JSONObject)parent).keySet()){
-					if(child.equals(((JSONObject)parent).get(key))){
-						((JSONObject)parent).remove(key);
+		if(parent !=null && parent instanceof List){
+			((List)parent).remove(child);
+		}else if(parent!=null && parent instanceof Map){
+			if(((Map)parent).containsValue(child)){
+				for(Object key:((Map)parent).keySet()){
+					if(child.equals(((Map)parent).get(key))){
+						((Map)parent).remove(key);
 						break;
 					}
 				}
@@ -334,15 +339,15 @@ public class SynapseJsonPath extends SynapsePath {
 	public Object replace(Object rootObject, Object newChild){
 		Object child=jsonPath.find(rootObject);
 		Object parent=findParent(rootObject);
-		if(parent !=null && parent instanceof JSONArray){
-			((JSONArray)parent).remove(child);
-			((JSONArray)parent).add(newChild);
-		}else if(parent!=null && parent instanceof JSONObject){
-			if(((JSONObject)parent).containsValue(child)){
-				for(String key:((JSONObject)parent).keySet()){
-					if(child.equals(((JSONObject)parent).get(key))){
-						((JSONObject)parent).remove(key);
-						((JSONObject)parent).put(key, newChild);
+		if(parent !=null && parent instanceof List){
+			((List)parent).remove(child);
+			((List)parent).add(newChild);
+		}else if(parent!=null && parent instanceof Map){
+			if(((Map)parent).containsValue(child)){
+				for(Object key:((Map)parent).keySet()){
+					if(child.equals(((Map)parent).get(key))){
+						((Map)parent).remove(key);
+						((Map)parent).put(key, newChild);
 						break;
 					}
 				}

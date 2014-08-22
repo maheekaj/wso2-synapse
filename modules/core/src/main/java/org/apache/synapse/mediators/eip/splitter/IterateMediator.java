@@ -45,6 +45,7 @@ import org.apache.synapse.mediators.eip.EIPConstants;
 import org.apache.synapse.mediators.eip.EIPUtils;
 import org.apache.synapse.mediators.eip.Target;
 import org.apache.synapse.util.MessageHelper;
+import org.apache.synapse.util.xpath.SynapseJsonPath;
 import org.apache.synapse.util.xpath.SynapseXPath;
 import org.jaxen.JaxenException;
 
@@ -161,7 +162,7 @@ public class IterateMediator extends AbstractMediator implements ManagedLifecycl
 					List list=(List)resultValue;
 					msgCount=list.size();
 					for (int i = 0; i < list.size(); i++) {
-						MessageContext itereatedMsgCtx = getIteratedMessage(synCtx, msgNumber++, msgCount, list.get(i).toString());
+						MessageContext itereatedMsgCtx = getIteratedMessage(synCtx, msgNumber++, msgCount, list.get(i));
 						ContinuationStackManager.addReliantContinuationState(itereatedMsgCtx, 0, getMediatorPosition());
 						target.mediate(itereatedMsgCtx);
 					}
@@ -208,7 +209,17 @@ public class IterateMediator extends AbstractMediator implements ManagedLifecycl
         return result;
     }
     
-    private MessageContext getIteratedMessage(MessageContext synCtx, int msgNumber, int msgCount, String node) throws AxisFault, JaxenException {
+    /**
+     * This method is for JSON messages
+     * @param synCtx
+     * @param msgNumber
+     * @param msgCount
+     * @param node
+     * @return
+     * @throws AxisFault
+     * @throws JaxenException
+     */
+    private MessageContext getIteratedMessage(MessageContext synCtx, int msgNumber, int msgCount, Object node) throws AxisFault, JaxenException {
     	// clone the message for the mediation in iteration
         MessageContext newCtx = MessageHelper.cloneMessageContext(synCtx);
 
@@ -226,8 +237,24 @@ public class IterateMediator extends AbstractMediator implements ManagedLifecycl
                     EIPConstants.MESSAGE_SEQUENCE,
                     msgNumber + EIPConstants.MESSAGE_SEQUENCE_DELEMITER + msgCount);
         }
+        
+        // Initially set the extracted object as root and send if payload is not preserved
+        Object rootObject=node;
+
+        // if payload should be preserved then attach the iteration element to the
+        // node specified by the attachPath
+        if (preservePayload) {
+        	rootObject=EIPUtils.getRootJSONObject((Axis2MessageContext) synCtx);
+        	if(rootObject!=null){
+        		rootObject = ((SynapseJsonPath)attachPath).replace(rootObject, node);
+        	}else{
+        		handleException("Error in attaching the splitted elements :: " +
+                        "Unable to get the attach path specified by the expression " +
+                        attachPath, synCtx);
+        	}
+        }
         // write the new JSON message to the stream
-        JsonUtil.newJsonPayload(((Axis2MessageContext) newCtx).getAxis2MessageContext(), node, true, true);
+        JsonUtil.newJsonPayload(((Axis2MessageContext) newCtx).getAxis2MessageContext(), rootObject.toString(), true, true);
         return newCtx;
     }
     
@@ -272,8 +299,7 @@ public class IterateMediator extends AbstractMediator implements ManagedLifecycl
         // if payload should be preserved then attach the iteration element to the
         // node specified by the attachPath
         if (preservePayload) {
-
-            Object attachElem = attachPath.evaluate(newEnvelope); // TODO check
+            Object attachElem = attachPath.evaluate(newEnvelope);
             if (attachElem != null &&
                 attachElem instanceof List && !((List) attachElem).isEmpty()) {
                 attachElem = ((List) attachElem).get(0);
@@ -287,7 +313,6 @@ public class IterateMediator extends AbstractMediator implements ManagedLifecycl
                     "Unable to get the attach path specified by the expression " +
                     attachPath, synCtx);
             }
-
         } else if (newEnvelope.getBody() != null) {
             // if not preserve payload then attach the iteration element to the body
         	if(newEnvelope.getBody().getFirstElement() !=null){

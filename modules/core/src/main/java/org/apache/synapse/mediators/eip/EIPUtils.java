@@ -164,25 +164,33 @@ public class EIPUtils {
     	Object newItemsObj=expression.evaluate(enricherContext);
     	if(newItemsObj!=null && newItemsObj instanceof List && !((List)newItemsObj).isEmpty()){
     		// find root element
-    		Object objectList = rootJsonPath.evaluate(messageContext);
-    		if (objectList != null && objectList instanceof List) {
-    			List list = (List) objectList;
-    			if (list != null && !list.isEmpty()){
-    				Object root = list.get(0);
-        			// find existing 0th item from the stream TODO check duplicate array know issue dosn't work with most child node
-            		Object parent = expression.findParent(root);
-            		// Iterate through new elements and add to parent element
-            		
-            		if(parent!=null){
-                    	for(Object item:(List)newItemsObj){
-                    		root = expression.append(root, parent, item);
-                    	}
-                    	// write the new JSON message to the stream
-                    	JsonUtil.newJsonPayload(((Axis2MessageContext) messageContext).getAxis2MessageContext(), root.toString(), true, true);
-                   	}
-    			}
-    		}
+    		Object root = getRootJSONObject(messageContext);
+			if (root != null){
+    			// find existing 0th item from the stream
+        		//Object parent = expression.findParent(root);
+        		// Iterate through new elements and add to parent element
+        		
+        		//if(parent!=null){
+                	for(Object item:(List)newItemsObj){
+                		root = expression.appendToParent(root, item);
+                	}
+                	// write the new JSON message to the stream
+                	JsonUtil.newJsonPayload(((Axis2MessageContext) messageContext).getAxis2MessageContext(), root.toString(), true, true);
+               	//}
+			}
     	}
+    }
+    
+    public static Object getRootJSONObject(MessageContext messageContext) throws JaxenException{
+    	Object root=null;
+    	Object objectList=rootJsonPath.evaluate(messageContext);
+    	if (objectList != null && objectList instanceof List) {
+			List list = (List) objectList;
+			if (list != null && !list.isEmpty()){
+				root = list.get(0);
+			}
+    	}
+        return root;
     }
 
     private static boolean isBody(OMElement body, OMElement enrichingElement) {
