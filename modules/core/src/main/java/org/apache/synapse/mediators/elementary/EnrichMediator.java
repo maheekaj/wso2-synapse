@@ -18,13 +18,19 @@
  */
 package org.apache.synapse.mediators.elementary;
 
+import net.minidev.json.parser.ParseException;
+
 import org.apache.axiom.om.OMNode;
+import org.apache.axis2.AxisFault;
 import org.apache.synapse.MessageContext;
 import org.apache.synapse.SynapseLog;
+import org.apache.synapse.commons.json.JsonUtil;
+import org.apache.synapse.core.axis2.Axis2MessageContext;
 import org.apache.synapse.mediators.AbstractMediator;
 import org.jaxen.JaxenException;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 
 /**
  * Syntax for EnrichMediator
@@ -76,18 +82,78 @@ public class EnrichMediator extends AbstractMediator {
                 synLog.traceTrace("Message : " + synCtx.getEnvelope());
             }
         }
-
-        ArrayList<OMNode> sourceNodeList;
-
-        try {
-            sourceNodeList = source.evaluate(synCtx, synLog);
-            if (sourceNodeList == null) {
-                handleException("Failed to get the source for Enriching : ", synCtx);
-            } else {
-                target.insert(synCtx, sourceNodeList, synLog);
+        
+        /*
+         * Check whether the incoming message has a json payload...
+         * By default, incomingMsgHasAJsonPayload is set to false
+         */
+        boolean incomingMsgHasAJsonPayload = false;
+        incomingMsgHasAJsonPayload = 
+        		JsonUtil.hasAJsonPayload(((Axis2MessageContext)synCtx).getAxis2MessageContext());
+              
+        boolean sourceHasCustom = (this.source.getSourceType() == EnrichMediator.CUSTOM);
+        boolean targetHasCustom = (this.target.getTargetType() == EnrichMediator.CUSTOM);
+        boolean sourceOrTargetOrBothHasCustom = (sourceHasCustom || targetHasCustom);
+        
+        boolean sourcePathIsJson = false;
+        if(sourceHasCustom){
+        	sourcePathIsJson = "JSON_PATH".equals(this.source.getXpath().getPathType());
+        }
+        
+        boolean targetPathIsJson = false;
+        if(targetHasCustom){
+        	targetPathIsJson = "JSON_PATH".equals(this.target.getXpath().getPathType());
+        }
+        
+        boolean sourceHasCustomJsonPath = (sourceHasCustom && sourcePathIsJson);
+        boolean targetHasCustomJsonPath = (targetHasCustom && targetPathIsJson);
+        
+        /* conditions where native-json-processing is supported... */
+        
+        boolean cndt1IsTrue = false, cndt2IsTrue = false, cndt3IsTrue = false, cndt4IsTrue = false;
+        cndt1IsTrue = (incomingMsgHasAJsonPayload && !sourceOrTargetOrBothHasCustom);
+        cndt2IsTrue = (incomingMsgHasAJsonPayload && sourceHasCustomJsonPath && !targetHasCustom);
+        cndt3IsTrue = (incomingMsgHasAJsonPayload && !sourceHasCustom && targetHasCustomJsonPath);
+        cndt4IsTrue = (incomingMsgHasAJsonPayload && sourceHasCustomJsonPath && targetHasCustomJsonPath);
+        
+        if(cndt1IsTrue || cndt2IsTrue || cndt3IsTrue || cndt4IsTrue) {
+        	HashMap<String, Object> sourceEvaluationStatus = null;
+            try {
+            	/* returning the message block to be enriched from the incoming message */
+            	sourceEvaluationStatus = source.evaluateNew(synCtx, synLog);
+            } catch (JaxenException e) {
+            	handleException("JaxenException : ", e, synCtx);
             }
-        } catch (JaxenException e) {
-            handleException("Failed to get the source for Enriching", e, synCtx);
+            if (sourceEvaluationStatus.get("errorsExistInSrcTag").equals(true)) {
+                handleException("Errors do exist in enrich source tag definition, unable to proceed : ", synCtx);
+            } else {
+            	/* synCtx: Incoming Message Context, 
+            	evaluatedSrcJsonElement: Json Element to be used for enriching */
+                try {
+                	target.insertNew(synCtx, sourceEvaluationStatus.get("evaluatedSrcJsonElement"), synLog);	                
+                } catch (JaxenException e) {
+                	handleException("JaxenException : ", e, synCtx);
+                } catch (AxisFault e) {
+                	handleException("AxisFault : ", e, synCtx);
+                } catch (ParseException e) {
+                	handleException("ParseException : ", e, synCtx);
+                }
+            }
+        } else {
+        	ArrayList<OMNode> sourceNodeList;
+            try {
+            	/* returning the message part to be enriched from the incoming message */
+                sourceNodeList = source.evaluate(synCtx, synLog);
+                if (sourceNodeList == null) {
+                    handleException("Failed to get the source for Enriching : ", synCtx);
+                } else {
+                	/* synCtx: Incoming Message Context, 
+                	sourceNodeList: Message part to be enriched from the in.message */
+                    target.insert(synCtx, sourceNodeList, synLog);
+                }
+            } catch (JaxenException e) {
+                handleException("Failed to get the source for Enriching", e, synCtx);
+            }
         }
 
         synLog.traceOrDebug("End : Enrich mediator");

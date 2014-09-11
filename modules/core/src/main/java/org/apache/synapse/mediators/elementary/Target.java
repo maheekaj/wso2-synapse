@@ -18,6 +18,13 @@
  */
 package org.apache.synapse.mediators.elementary;
 
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+import net.minidev.json.parser.ParseException;
+
 import org.apache.axiom.om.OMAttribute;
 import org.apache.axiom.om.OMElement;
 import org.apache.axiom.om.OMNode;
@@ -29,13 +36,16 @@ import org.apache.axis2.AxisFault;
 import org.apache.synapse.MessageContext;
 import org.apache.synapse.SynapseException;
 import org.apache.synapse.SynapseLog;
-import org.apache.synapse.util.xpath.SynapseXPath;
+import org.apache.synapse.commons.json.JSONProviderUtil;
+import org.apache.synapse.commons.json.JsonUtil;
+import org.apache.synapse.config.xml.SynapsePath;
+import org.apache.synapse.core.axis2.Axis2MessageContext;
+import org.apache.synapse.mediators.eip.EIPUtils;
+import org.apache.synapse.util.xpath.SynapseJsonPath;
 import org.jaxen.JaxenException;
 
-import java.util.ArrayList;
-
 /**
- * Inset an Axiom element to the current message. The target to insert the OMElement can be
+ * Insert an Axiom element to the current message. The target to insert the OMElement can be
  * 1. A property
  * 2. SOAP Body child element
  * 3. SOAP envelope
@@ -55,7 +65,8 @@ import java.util.ArrayList;
 
 public class Target {
 
-    private SynapseXPath xpath = null;
+    //private SynapseXPath xpath = null;
+	private SynapsePath xpath = null;
 
     private String property = null;
 
@@ -114,9 +125,12 @@ public class Target {
             SOAPEnvelope env = synContext.getEnvelope();
             SOAPBody body = env.getBody();
 
+            //getting the first element of the in.message body...
             OMElement e = body.getFirstElement();
 
             if (e != null) {
+            	//sourceNodeList: Message part to be enriched from the in.message, 
+            	//e: FirstElement of in.message
                 insertElement(sourceNodeList, e, synLog);
             } else {
                 // if the body is empty just add as a child
@@ -167,7 +181,7 @@ public class Target {
 			}
         }
     }
-
+    
     private void insertElement(ArrayList<OMNode> sourceNodeList, OMElement e, SynapseLog synLog) {
         if (action.equals(ACTION_REPLACE)) {
             boolean isInserted = false;
@@ -201,7 +215,232 @@ public class Target {
         }
     }
 
-    public SynapseXPath getXpath() {
+    public void insertNew(MessageContext synCtx, Object sourceJsonElement, SynapseLog synLog) 
+    		throws JaxenException, AxisFault, ParseException {
+    	
+    	if (targetType == EnrichMediator.CUSTOM) {
+    		
+    		if(this.xpath != null) {
+    		       		
+        		SynapseJsonPath targetJsonPath = (SynapseJsonPath)xpath;
+        		boolean targetPathIsDefinite = targetJsonPath.isPathDefinite();
+        		boolean targetPathIsValid = targetJsonPath.isPathValid(synCtx).equals("yes");
+        		
+        		if(targetPathIsDefinite && targetPathIsValid) {
+        			/* only if target-path-is-definite, a new element will be considered to be attached */
+        			Object incomingJsonPayload = null, outgoingJsonPayload = null;
+            		incomingJsonPayload = EIPUtils.getRootJSONObject((Axis2MessageContext)synCtx);            		
+            		
+            		if (action.equals(ACTION_REPLACE)) {
+            			/* check if targetJsonPath is "$", "$." */
+            			boolean cndt1IsTrue = "$".equals(targetJsonPath.expression);
+            			boolean cndt2IsTrue = "$.".equals(targetJsonPath.expression);
+            			
+            			if(cndt1IsTrue || cndt2IsTrue) {
+            				/* if 'true', then is equal to an entire-body-replacement */
+            				if(sourceJsonElement instanceof Map || sourceJsonElement instanceof List) {
+                    			outgoingJsonPayload = sourceJsonElement;
+                    			/* creating the outgoing message with enriched json payload */
+                            	JsonUtil.newJsonPayload(((Axis2MessageContext)synCtx).getAxis2MessageContext(),
+                            	                    JSONProviderUtil.objectToString(outgoingJsonPayload), true, true);
+                    		} else {
+                    			synLog.error("Error executing Target-type 'custom' with action 'replace' : " +
+                    					"Invalid source json element < " + sourceJsonElement + " >, to be inserted " +
+                    							"as the outgoing message body");
+                    		}
+            			} else {
+
+            				outgoingJsonPayload = targetJsonPath.replace(incomingJsonPayload, sourceJsonElement);
+                        	/* creating the outgoing message with enriched json payload */
+                            JsonUtil.newJsonPayload(((Axis2MessageContext)synCtx).getAxis2MessageContext(),
+                                                    JSONProviderUtil.objectToString(outgoingJsonPayload), true, true);          				
+            			}
+            			
+                    } else if (action.equals(ACTION_ADD_CHILD)) {
+                    
+                    	HashMap<String, Object> result = targetJsonPath.getJsonElement(synCtx);
+                    	Object targetJsonElement = result.get("evaluatedJsonElement");
+                    	if(targetJsonElement instanceof List) {
+                    		outgoingJsonPayload = targetJsonPath.append(incomingJsonPayload, sourceJsonElement);
+                    		/* creating the outgoing message with enriched json payload */
+                            JsonUtil.newJsonPayload(((Axis2MessageContext)synCtx).getAxis2MessageContext(),
+                            		                JSONProviderUtil.objectToString(outgoingJsonPayload), true, true);
+                    	} else {
+                    		synLog.error("Error executing Target-type 'custom' with action 'child' : " +
+                					"Target json element currently does not hold a JSON Array to which " +
+                					"a new child can be attached");
+                    	}                  	
+                    	
+                    } else if (action.equals(ACTION_ADD_SIBLING)) {
+
+                    	outgoingJsonPayload = targetJsonPath.appendToParent(incomingJsonPayload, sourceJsonElement, true);
+                    	/* creating the outgoing message with enriched json payload */
+                        JsonUtil.newJsonPayload(((Axis2MessageContext)synCtx).getAxis2MessageContext(),
+                                                    JSONProviderUtil.objectToString(outgoingJsonPayload), true, true);
+                    }
+        		} else {
+        			
+        			if(!targetPathIsDefinite) {
+        				synLog.error("Error executing Target-type 'custom' : Json-path is not definite");
+        			}
+        			if(!targetPathIsValid) {
+        				synLog.error("Error executing Target-type 'custom' : " +
+            					"Specified target json-path does not exist in the incoming message body");
+        			}      			
+        		}
+        		
+    		} else { 			
+    			synLog.error("Error executing Target-type 'custom' : Json-path is null & somehow, not set");
+    		}
+    		
+        } else if (targetType == EnrichMediator.BODY) {
+        	
+        	if (action.equals(ACTION_REPLACE)) {
+        		
+        		if(sourceJsonElement instanceof Map || sourceJsonElement instanceof List) {
+        			Object outgoingJsonPayload = sourceJsonElement;
+        			/* creating the outgoing message with enriched json payload */
+                	JsonUtil.newJsonPayload(((Axis2MessageContext)synCtx).getAxis2MessageContext(),
+                	                                JSONProviderUtil.objectToString(outgoingJsonPayload), true, true);
+        		} else {
+        			synLog.error("Error executing Target-type 'body' with action 'replace' : " +
+        					"Invalid source json element < " + sourceJsonElement + " >, to be inserted " +
+        							"as the outgoing message body");
+        		}
+            } else if (action.equals(ACTION_ADD_CHILD)) {
+            	
+        		Object incomingJsonPayload = null;
+        		incomingJsonPayload = EIPUtils.getRootJSONObject((Axis2MessageContext)synCtx);
+        		
+        		/* check if incomingJsonPayload is a JSON Array
+        		 * if 'yes', attach sourceJsonElement as a child
+        		 * if 'not', skip */
+        		if(incomingJsonPayload instanceof List){
+        			Object outgoingJsonPayload = null;
+        			SynapseJsonPath targetJsonPath = new SynapseJsonPath("$");            		
+        			outgoingJsonPayload = targetJsonPath.append(incomingJsonPayload, sourceJsonElement);
+        			/* creating the outgoing message with enriched json payload */
+                	JsonUtil.newJsonPayload(((Axis2MessageContext)synCtx).getAxis2MessageContext(),
+                	                                JSONProviderUtil.objectToString(outgoingJsonPayload), true, true);
+        		} else {
+        			synLog.error("Error executing Target-type 'body' with action 'child' : " +
+        					"Incoming message payload currently holds a JSON Object to which " +
+        					"a new child cannot be attached without defining a key");
+        		}
+        			
+            } else if (action.equals(ACTION_ADD_SIBLING)) {
+            	
+            	Object incomingJsonPayload = null, outgoingJsonPayload = null;
+        		incomingJsonPayload = EIPUtils.getRootJSONObject((Axis2MessageContext)synCtx);
+        		
+        		ArrayList<Object> newArrayList = new ArrayList<Object>();
+        		newArrayList.add(incomingJsonPayload);
+        		/* check if sourceJsonElement is a String 
+        		 * if 'yes', convert that to a JSON String element */
+        		if(sourceJsonElement instanceof String){
+        			if(!((String)sourceJsonElement).startsWith("\"") && 
+        					!((String)sourceJsonElement).endsWith("\"")){
+        				sourceJsonElement = "\"" + (String)sourceJsonElement + "\"";
+        			}      			
+        		}
+        		newArrayList.add(sourceJsonElement);        		
+        		newArrayList.trimToSize();       		
+        		outgoingJsonPayload = newArrayList;
+        		
+        		/* creating the outgoing message with enriched json payload */
+            	JsonUtil.newJsonPayload(((Axis2MessageContext)synCtx).getAxis2MessageContext(),
+            	                           JSONProviderUtil.objectToString(outgoingJsonPayload), true, true);
+            }
+        	
+        } else if (targetType == EnrichMediator.PROPERTY) {
+        	if(property != null && !property.isEmpty()){
+            	if (action.equals(ACTION_REPLACE)) {
+            		
+            		if(sourceJsonElement instanceof Map || sourceJsonElement instanceof List){
+            			synCtx.setProperty(property, JSONProviderUtil.objectToString(sourceJsonElement));
+            		} else if (sourceJsonElement == null){
+            			synCtx.setProperty(property, "null");
+            		} else {
+            			synCtx.setProperty(property, sourceJsonElement);
+            		}
+                } else if (action.equals(ACTION_ADD_CHILD)) {
+
+                	Object o = synCtx.getProperty(property);
+                	if(o != null){
+                		if(o instanceof String){
+                			String s = ((String)o);
+                			/* check if string may contain a json-array */
+                			if(s.startsWith("[")){
+                				/* if yes, try to convert */
+           					 	Object jsonArray = EIPUtils.stringtoJSON(s);
+           					 	if(jsonArray != null){
+           					 		/* if not null, 'jsonArray' must now contain the corresponding json array 
+           					 		 * Only then, sourceJsonElement can be inserted as a child */
+               					 	SynapseJsonPath targetJsonPath = new SynapseJsonPath("$.");            		
+                            		Object targetJsonElement = targetJsonPath.append(jsonArray, sourceJsonElement);
+                            		synCtx.setProperty(property, JSONProviderUtil.objectToString(targetJsonElement));
+           					 	} else {
+               					 	synLog.error("Error executing Target-type 'property' with action 'child' : " +
+                            			"Original value of property " + property + "does not hold a valid object" +
+                            			"representation (should be a JSON Array String) to take source as a child");
+           					 	}
+                			} else {
+                				synLog.error("Error executing Target-type 'property' with action 'child' : " +
+                            			"Original value of property " + property + "does not hold a valid object" +
+                            			"representation (should be a JSON Array String) to take source as a child");
+                			}
+                		} else {
+                			/* 'else' becomes true, when 'o' is a number or boolean ... */
+                			synLog.error("Error executing Target-type 'property' with action 'child' : " +
+                        			"Original value of property " + property + "does not hold a valid object" +
+                        			"representation (should be a JSON Array String) to take source as a child");
+                		}
+                	} else {
+                		synLog.error("Error executing Target-type 'property' with action 'child' : " +
+                				"Specifed property does not exist");
+                	}          	
+                } else if (action.equals(ACTION_ADD_SIBLING)) {
+                	
+                	Object o = synCtx.getProperty(property);
+                	if(o != null){ 
+                		ArrayList<Object> newArrayList = new ArrayList<Object>();
+                		/* check if o is a String 
+                		 * if 'yes', convert that to a JSON String element */
+                		if(o instanceof String){
+                			if(!((String)o).startsWith("\"") && 
+                					!((String)o).endsWith("\"")){
+                				o = "\"" + (String)o + "\"";
+                			} 
+                		}
+                		newArrayList.add(o);
+                		/* check if sourceJsonElement is a String 
+                		 * if 'yes', convert that to a JSON String element */
+                		if(sourceJsonElement instanceof String){
+                			if(!((String)sourceJsonElement).startsWith("\"") && 
+                					!((String)sourceJsonElement).endsWith("\"")){
+                				sourceJsonElement = "\"" + (String)sourceJsonElement + "\"";
+                			}      			
+                		}
+                		newArrayList.add(sourceJsonElement);
+                		newArrayList.trimToSize();
+                		synCtx.setProperty(property, newArrayList.toString());
+                	} else {
+                		synLog.error("Error executing Target-type 'property' with action 'sibling' : " +
+                				"Specifed property does not exist");
+                	}
+                }
+        	} else {
+        		synLog.error("Error executing Target-type 'property' : " +
+        				"property is null & somehow, not set or empty");
+        	}
+        }
+    }
+    
+    /* 
+     * original:
+     * public SynapseXPath getXpath() {return xpath;} 
+     */
+    public SynapsePath getXpath() {
         return xpath;
     }
 
@@ -213,7 +452,11 @@ public class Target {
         return targetType;
     }
 
-    public void setXpath(SynapseXPath xpath) {
+    /* 
+     * original:
+     * public void setXpath(SynapseXPath xpath) {this.xpath = xpath;}
+     */
+    public void setXpath(SynapsePath xpath) {
         this.xpath = xpath;
     }
 
@@ -233,5 +476,3 @@ public class Target {
         this.action = action;
     }
 }
-
-
