@@ -20,16 +20,19 @@
 package org.apache.synapse.mediators.eip;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 
 import org.apache.axiom.om.OMElement;
 import org.apache.axiom.om.OMNode;
 import org.apache.axiom.soap.SOAPEnvelope;
+import org.apache.commons.io.IOUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.synapse.MessageContext;
 import org.apache.synapse.SynapseException;
+import org.apache.synapse.commons.json.JSONProviderUtil;
 import org.apache.synapse.commons.json.JsonUtil;
 import org.apache.synapse.core.axis2.Axis2MessageContext;
 import org.apache.synapse.util.xpath.SynapseJsonPath;
@@ -175,7 +178,7 @@ public class EIPUtils {
                 		root = expression.appendToParent(root, item);
                 	}
                 	// write the new JSON message to the stream
-                	JsonUtil.newJsonPayload(((Axis2MessageContext) messageContext).getAxis2MessageContext(), root.toString(), true, true);
+                	JsonUtil.newJsonPayload(((Axis2MessageContext) messageContext).getAxis2MessageContext(), JSONProviderUtil.objectToString(root), true, true);
                	//}
 			}
     	}
@@ -184,7 +187,7 @@ public class EIPUtils {
     public static Object getRootJSONObject(MessageContext messageContext) throws JaxenException{
     	Object root=null;
     	Object objectList=rootJsonPath.evaluate(messageContext);
-    	if (objectList != null && objectList instanceof List) {
+    	if (objectList != null && objectList instanceof List) { // TODO JSON array uses array list. need to do something else
 			List list = (List) objectList;
 			if (list != null && !list.isEmpty()){
 				root = list.get(0);
@@ -251,5 +254,9 @@ public class EIPUtils {
         return envelope;
     }
 
-
+    public static Object stringtoJSON(String str) throws JaxenException {
+        SynapseJsonPath root = new SynapseJsonPath("$");
+        HashMap<String, Object> result = root.getJsonElement(IOUtils.toInputStream(str));
+        return result.get("evaluatedJsonElement");
+    }
 }
