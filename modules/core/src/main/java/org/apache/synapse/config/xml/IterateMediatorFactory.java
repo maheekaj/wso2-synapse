@@ -31,7 +31,6 @@ import org.apache.synapse.Mediator;
 import org.apache.synapse.SynapseConstants;
 import org.apache.synapse.mediators.eip.Target;
 import org.apache.synapse.mediators.eip.splitter.IterateMediator;
-import org.apache.synapse.util.xpath.SynapseXPath;
 import org.jaxen.JaxenException;
 
 /**
@@ -121,9 +120,11 @@ public class IterateMediatorFactory extends AbstractMediatorFactory {
         }
         
         try {
-            SynapseXPath xp = new SynapseXPath(attachPathValue);
-            OMElementUtils.addNameSpaces(xp, elem, log);
-            mediator.setAttachPath(xp);
+        	if(attachPath!=null){
+                SynapsePath xp = SynapsePathFactory.getSynapsePath(elem, ATT_ATTACHPATH);
+                OMElementUtils.addNameSpaces(xp, elem, log);
+                mediator.setAttachPath(xp);
+        	}
         } catch (JaxenException e) {
             handleException("Unable to build the IterateMediator. Invalid XPATH " +
                 attachPathValue, e);

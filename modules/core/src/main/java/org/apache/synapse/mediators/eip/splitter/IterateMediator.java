@@ -32,6 +32,7 @@ import org.apache.synapse.ContinuationState;
 import org.apache.synapse.ManagedLifecycle;
 import org.apache.synapse.MessageContext;
 import org.apache.synapse.SynapseLog;
+import org.apache.synapse.commons.json.JSONProviderUtil;
 import org.apache.synapse.commons.json.JsonUtil;
 import org.apache.synapse.config.xml.SynapsePath;
 import org.apache.synapse.continuation.ContinuationStackManager;
@@ -254,7 +255,7 @@ public class IterateMediator extends AbstractMediator implements ManagedLifecycl
         	}
         }
         // write the new JSON message to the stream
-        JsonUtil.newJsonPayload(((Axis2MessageContext) newCtx).getAxis2MessageContext(), rootObject.toString(), true, true);
+        JsonUtil.newJsonPayload(((Axis2MessageContext) newCtx).getAxis2MessageContext(), JSONProviderUtil.objectToString(rootObject), true, true);
         return newCtx;
     }
     
