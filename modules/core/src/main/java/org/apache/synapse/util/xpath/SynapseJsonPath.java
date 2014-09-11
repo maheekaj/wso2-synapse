@@ -21,6 +21,7 @@ package org.apache.synapse.util.xpath;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -35,8 +36,10 @@ import org.apache.synapse.config.xml.SynapsePath;
 import org.apache.synapse.core.axis2.Axis2MessageContext;
 import org.jaxen.JaxenException;
 
+import com.jayway.jsonpath.Configuration;
 import com.jayway.jsonpath.JsonPath;
 import com.jayway.jsonpath.internal.PathTokenizer;
+import com.jayway.jsonpath.spi.impl.JacksonProvider;
 
 public class SynapseJsonPath extends SynapsePath {
 
@@ -46,6 +49,11 @@ public class SynapseJsonPath extends SynapsePath {
     getProperty(SynapseConstants.STREAMING_JSONPATH_PROCESSING);
 
     private JsonPath jsonPath;
+    private static Configuration configuration;
+    
+    static{
+    	configuration = Configuration.builder().jsonProvider(new JacksonProvider()).build();
+    }
 
     private boolean isWholeBody = false;
 
@@ -69,7 +77,7 @@ public class SynapseJsonPath extends SynapsePath {
             return jsonString;
         }
         Object read;
-        read = jsonPath.read(jsonString);
+        read = jsonPath.read(jsonString,configuration);
         return (null == read ? "null" : read.toString());
     }
 
@@ -115,7 +123,7 @@ public class SynapseJsonPath extends SynapsePath {
         }
         Object read;
         try {
-            read = jsonPath.read(jsonStream);
+            read = jsonPath.read(jsonStream, configuration);
             if (log.isDebugEnabled()) {
                 log.debug("#stringValueOf. Evaluated JSON path <" + jsonPath.getPath() + "> : <" + (read == null ? null : read.toString()) + ">");
             }
@@ -141,7 +149,7 @@ public class SynapseJsonPath extends SynapsePath {
     }
     
     /**
-     * Read the JSON Stream and returns a list of string representations of return JSON elements from JSON path.
+     * Read the JSON Stream and returns a list of objects using the jsonPath.
      */
 	@Override
 	public Object evaluate(Object object) throws JaxenException {
@@ -196,20 +204,15 @@ public class SynapseJsonPath extends SynapsePath {
         List result=new ArrayList();
         Object object;
         try {
-        	object = jsonPath.read(jsonStream);
+        	object = jsonPath.read(jsonStream, configuration);
             if (log.isDebugEnabled()) {
                 log.debug("#listValueOf. Evaluated JSON path <" + jsonPath.getPath() + "> : <" + (object == null ? null : object.toString()) + ">");
             }
-            
             if(object !=null){
-            	if(object instanceof List){
-            		List arr = (List)object;
-                	for (Object obj : arr) {
-                		result.add(obj!=null?obj:"null");
-                    }
-            	}else{
+            	if(object instanceof List && !jsonPath.isPathDefinite()){
+            		result = (List) object;
+            	}else
             		result.add(object);
-            	}
             }
         } catch (IOException e) {
             handleException("Error evaluating JSON Path <" + jsonPath.getPath() + ">", e);
@@ -222,82 +225,183 @@ public class SynapseJsonPath extends SynapsePath {
         return result;
     }
 	
-	public Object find(Object rootObject){
+	/**
+	 * Find the matching objects in the given rootObject instance and returns
+	 * the same instance without creating clones. So when we modify the result
+	 * objects, rootObject also get effected.
+	 * 
+	 * @param rootObject
+	 *            Root JSON object
+	 * @return matching objects within the rootObject
+	 */
+	public Object find(Object rootObject) {
 		return jsonPath.find(rootObject);
 	}
 	
 	/**
-	 * This method will evaluate the JSON expression and return the first parent object matching object.
-	 * @param rootObject Root JSON Object or Array to evaluate
+	 * This method will evaluate the JSON expression and return the first parent
+	 * object matching object.
+	 * 
+	 * @param rootObject
+	 *            Root JSON Object or Array to evaluate
 	 * @return Parent object of the evaluation result
 	 */
-	public Object findParent(Object rootObject){
-		Object parent=null;
-		PathTokenizer tokenizer=new PathTokenizer(jsonPath.getPath());
-		tokenizer.removeLastPathToken();
-		StringBuilder sb=new StringBuilder();
-		List<String> fragments=tokenizer.getFragments();
-		for(int i=0;i<fragments.size();i++){
-			sb.append(fragments.get(i));
-			if(i<fragments.size()-1)
-				sb.append(".");
+	private Object findParent(Object rootObject) {
+		Object parent = null;
+		if (!isWholeBody) {
+			PathTokenizer tokenizer = new PathTokenizer(jsonPath.getPath());
+			tokenizer.removeLastPathToken();
+			StringBuilder sb = new StringBuilder();
+			List<String> fragments = tokenizer.getFragments();
+			for (int i = 0; i < fragments.size(); i++) {
+				sb.append(fragments.get(i));
+				if (i < fragments.size() - 1)
+					sb.append(".");
+			}
+			if (!"".equals(sb.toString())) {
+				JsonPath tempPath = JsonPath.compile(sb.toString());
+				parent = tempPath.find(rootObject);
+			}
 		}
-		JsonPath tempPath=JsonPath.compile(sb.toString());
-		parent= tempPath.find(rootObject);
 		return parent;
 	}
 	
 	/**
-	 * This method will insert given child Object (JSONObject or JSONArray) to the matching path of the root object. Updated root object will be return back to the caller.
+	 * This method will insert given child Object (JSONObject or JSONArray) to
+	 * the matching path of the root object. Updated root object will be return
+	 * back to the caller.
 	 * 
-	 * @param rootObject Root JSON Object or Array
-	 * @param child new JSON object to be insert
+	 * @param rootObject
+	 *            Root JSON Object or Array
+	 * @param child
+	 *            new JSON object to be insert
 	 * @return Updated Root Object
 	 */
-	public Object appendToParent(Object rootObject, Object child){
-		Object parent=findParent(rootObject);
-        return append(rootObject, parent, child);
-	}
-	
-	public Object append(Object rootObject, Object child){
-		Object parent=jsonPath.find(rootObject);
-		return append(rootObject, parent, child);
+	public Object appendToParent(Object rootObject, Object newChild) {
+		return appendToParent(rootObject, newChild, false);
 	}
 	
 	/**
-	 * This method will insert given child Object (JSONObject or JSONArray) to given parent object. Updated root object will be return back to the caller.
+	 * This method will insert given child Object (JSONObject or JSONArray) to
+	 * the matching path of the root object. Updated root object will be return
+	 * back to the caller.
 	 * 
-	 * @param rootObject Root JSON Object or Array
-	 * @param parent Parent JSON Object or Array
-	 * @param child New item to insert
+	 * @param rootObject
+	 *            Root JSON Object or Array
+	 * @param child
+	 *            new JSON object to be insert
+	 * @param isSibling
+	 *            true if the new item add as a sibling
 	 * @return Updated Root Object
 	 */
-	public Object append(Object rootObject, Object parent, Object child){
-		if(parent !=null && parent instanceof List){
-            ((List)parent).add(child);
-        }else if(parent!=null && parent instanceof Map){
-        	parent=findParent(rootObject);
-            Object currentChild=jsonPath.find(rootObject);
-            if(parent !=null && currentChild!=null){
-                Map obj=(Map)parent;
-                for(Object key:obj.keySet()){
-                    if(currentChild.equals(obj.get(key))){
-                    	rootObject = appendToObject(rootObject, obj, key, child);
-                    }
-                }
-            }
-        }
-        return rootObject;
+	public Object appendToParent(Object rootObject, Object newChild, boolean isSibling) {
+		Object parent = findParent(rootObject);
+		if (parent == null) {
+			if (isWholeBody) {
+				if (!(rootObject instanceof List)) {
+					List array = new ArrayList<Object>();
+					array.add(rootObject);
+					rootObject = array;
+				}
+				parent = rootObject;
+			}
+		}
+		rootObject = append(rootObject, parent, newChild, isSibling);
+		return rootObject;
 	}
 	
-	private Object appendToObject(Object rootObject, Map parent, Object key, Object child){
-		if(parent!=null && parent.containsKey(key)){
-			Object existingValue=parent.get(key);
-			if(existingValue instanceof List){
-				List array=(List)existingValue;
+	/**
+	 * This method will insert given child Object (JSONObject or JSONArray) to
+	 * the matching parent object of the jsonPath. Updated root object will be
+	 * return back to the caller.
+	 * 
+	 * @param rootObject
+	 *            Root JSON Object or Array
+	 * @param child
+	 *            New item to insert
+	 * @return Updated Root Object
+	 */
+	public Object append(Object rootObject, Object child) {
+		Object parent = jsonPath.find(rootObject);
+		return append(rootObject, parent, child, false);
+	}
+
+	/**
+	 * This method will insert given child Object (JSONObject or JSONArray) to
+	 * given parent object. Updated root object will be return back to the
+	 * caller.
+	 * 
+	 * @param rootObject
+	 *            Root JSON Object or Array
+	 * @param parent
+	 *            Parent JSON Object or Array
+	 * @param child
+	 *            New item to insert
+	 * @param isSibling
+	 *            true if the new item add as a sibling
+	 * @return Updated Root Object
+	 */
+	public Object append(Object rootObject, Object parent, Object child, boolean isSibling) {
+		if (parent != null && parent instanceof List) {
+			((List) parent).add(child);
+		} else if (parent != null && parent instanceof Map) {
+			parent = findParent(rootObject);
+			Object currentChild = jsonPath.find(rootObject);
+			if (parent != null && currentChild != null) {
+				String skey = getLastToken();
+				Map obj = (Map) parent;
+				if (obj.containsKey(skey)) {
+					Object val = obj.get(skey);
+					if ((currentChild == null && val == currentChild) || currentChild.equals(val)) {
+						rootObject = appendToObject(rootObject, obj, skey, child, isSibling);
+						return rootObject;
+					}
+				}
+				// This section executes if the key is not available. There is a
+				// possibility of having same value more than once and in such a
+				// instances, first value will be removed
+				if (obj.containsValue(currentChild)) {
+					for (Object key : obj.keySet()) {
+						Object val = obj.get(key);
+						if ((currentChild == null && val == currentChild) ||
+						    currentChild.equals(val)) {
+							rootObject = appendToObject(rootObject, obj, key, child, isSibling);
+						}
+					}
+				}
+			}
+		}
+		return rootObject;
+	}
+
+	/**
+	 * Append the given child to the parent object with given key. if the key is
+	 * exist and if value of the key is an array then new child will added to
+	 * the same array, otherwise will create an array and add existing and new
+	 * child to it. if the isSibling is true, even the value is an array will
+	 * create an new array.
+	 * 
+	 * @param rootObject
+	 *            Root JSON Object or Array
+	 * @param parent
+	 *            Parent JSON Object or Array
+	 * @param key
+	 *            key of the new child
+	 * @param child
+	 *            New child object to append
+	 * @param isSibling
+	 *            true if the new item add as a sibling
+	 * @return Updated root object
+	 */
+	private Object appendToObject(Object rootObject, Map parent, Object key, Object child,
+	                              boolean isSibling) {
+		if (parent != null && parent.containsKey(key)) {
+			Object existingValue = parent.get(key);
+			if (!isSibling && existingValue instanceof List) {
+				List array = (List) existingValue;
 				array.add(child);
-			}else{
-				List array=new ArrayList();
+			} else {
+				List array = new ArrayList();
 				array.add(existingValue);
 				array.add(child);
 				parent.put(key, array);
@@ -305,22 +409,40 @@ public class SynapseJsonPath extends SynapsePath {
 		}
 		return rootObject;
 	}
-	
+
 	/**
-	 * This method will remove given child object from the given parent object. Updated rootObject will be return back to the caller
-	 * @param rootObject Root JSON Object or Array
-	 * @param parent Parent JSON Object or Array
-	 * @param child item to remove
+	 * This method will remove given child object from the given parent object.
+	 * Updated rootObject will be return back to the caller
+	 * 
+	 * @param rootObject
+	 *            Root JSON Object or Array
+	 * @param parent
+	 *            Parent JSON Object or Array
+	 * @param child
+	 *            item to remove
 	 * @return Updated Root Object
 	 */
-	public Object remove(Object rootObject, Object parent, Object child){
-		if(parent !=null && parent instanceof List){
-			((List)parent).remove(child);
-		}else if(parent!=null && parent instanceof Map){
-			if(((Map)parent).containsValue(child)){
-				for(Object key:((Map)parent).keySet()){
-					if(child.equals(((Map)parent).get(key))){
-						((Map)parent).remove(key);
+	public Object remove(Object rootObject, Object parent, Object child) {
+		if (parent != null && parent instanceof List) {
+			((List) parent).remove(child);
+		} else if (parent != null && parent instanceof Map) {
+			String skey = getLastToken();
+			Map parentMap = (Map) parent;
+			if (parentMap.containsKey(skey)) {
+				Object val = parentMap.get(skey);
+				if ((child == null && val == child) || child.equals(val)) {
+					parentMap.remove(skey);
+					return rootObject;
+				}
+			}
+			// This section executes if the key is not available. There is a
+			// possibility of having same value more than once and in such a
+			// instances, first value will be removed
+			if (parentMap.containsValue(child)) {
+				for (Object key : parentMap.keySet()) {
+					Object val = parentMap.get(key);
+					if ((child == null && val == child) || child.equals(val)) {
+						parentMap.remove(skey);
 						break;
 					}
 				}
@@ -328,31 +450,151 @@ public class SynapseJsonPath extends SynapsePath {
 		}
 		return rootObject;
 	}
-	
-	
+
 	/**
-	 * This method will be replace first matching item with given child object. Updated root object will be return back to the caller
-	 * @param rootObject Root JSON Object or Array
-	 * @param newChild New item to replace
+	 * This method will be replace first matching item with given child object.
+	 * Updated root object will be return back to the caller
+	 * 
+	 * @param rootObject
+	 *            Root JSON Object or Array
+	 * @param newChild
+	 *            New item to replace
 	 * @return Updated Root Object
 	 */
-	public Object replace(Object rootObject, Object newChild){
-		Object child=jsonPath.find(rootObject);
-		Object parent=findParent(rootObject);
-		if(parent !=null && parent instanceof List){
-			((List)parent).remove(child);
-			((List)parent).add(newChild);
-		}else if(parent!=null && parent instanceof Map){
-			if(((Map)parent).containsValue(child)){
-				for(Object key:((Map)parent).keySet()){
-					if(child.equals(((Map)parent).get(key))){
-						((Map)parent).remove(key);
-						((Map)parent).put(key, newChild);
-						break;
-					}
-				}
-			}
+	public Object replace(Object rootObject, Object newChild) {
+		if(isWholeBody){
+			rootObject = newChild;
+		}else{
+    		Object child = jsonPath.find(rootObject);
+    		Object parent = findParent(rootObject);
+    		if (parent != null && parent instanceof List) {
+    			((List) parent).remove(child);
+    			((List) parent).add(newChild);
+    		} else if (parent != null && parent instanceof Map) {
+    			String skey = getLastToken();
+    			Map parentMap = (Map) parent;
+    			if (parentMap.containsKey(skey)) {
+    				Object val = parentMap.get(skey);
+    				if ((child == null && val == child) || child.equals(val)) {
+    					parentMap.put(skey, newChild);
+    					return rootObject;
+    				}
+    			}
+    			// This section executes if the key is not available. There is a
+    			// possibility of having same value more than once and in such a
+    			// instances, first value will be replaced
+    			if (parentMap.containsValue(child)) {
+    				for (Object key : parentMap.keySet()) {
+    					Object val = parentMap.get(key);
+    					if ((child == null && val == child) || child.equals(val)) {
+    						parentMap.put(key, newChild);
+    						break;
+    					}
+    				}
+    			}
+    		}
 		}
 		return rootObject;
 	}
+
+	/**
+	 * Return the last token of the jsonPath instance. If the jsonPath is
+	 * $.student.name, name will be the result. this is useful to identify the
+	 * key of the JSON objects
+	 * 
+	 * @return last token of the jsonPath.
+	 */
+	private String getLastToken() {
+		PathTokenizer tokenizer = new PathTokenizer(jsonPath.getPath());
+		return tokenizer.getFragments().get(tokenizer.getFragments().size() - 1);
+	}
+	
+	/**
+     * This method will return the corresponding JSON Element in a HashMap,
+     * provided that a json stream of the payload is input.
+     * Resulting HashMap will contain values for the following keys: <br/>   
+     * [1] "errorsExistInReadingStream" - Boolean, <br/>
+     * [2] "pathIsValid" - String (possible values: "yes", "no", "cannot-decide"), <br/>
+     * [3] "evaluatedJsonElement" - Object
+     * @param Json stream of the message payload
+     * @return A HashMap as stated above
+     */
+    public HashMap<String, Object> getJsonElement(final InputStream jsonStream){
+       
+        HashMap<String, Object> executionStatus = new HashMap<String, Object>();
+       
+        /* Initializing execution status */
+        executionStatus.put("errorsExistInReadingStream", false);
+        executionStatus.put("pathIsValid", "cannot-decide");
+        executionStatus.put("evaluatedJsonElement", null);
+       
+        boolean anIOExceptionOccured = false;
+        boolean anExceptionOccured = false;
+       
+        try {
+            Object o = jsonPath.read(jsonStream);
+            executionStatus.put("evaluatedJsonElement", o);
+            if (log.isDebugEnabled()) {
+                log.debug("#getJsonElement. Evaluated JSON path <" + jsonPath.getPath() +
+                          "> : <" + (o == null ? null : o.toString()) + ">");
+            }
+        } catch (IOException e) {
+            handleException("#getJsonElement. Error evaluating JSON Path <" + jsonPath.getPath() + ">", e);
+            executionStatus.put("errorsExistInReadingStream", true);
+            anIOExceptionOccured = true;
+        } catch (Exception e) {
+            // catch invalid json paths that do not match with the existing JSON payload.
+            log.error("#getJsonElement. Error evaluating JSON Path <" + jsonPath.getPath() +
+                      ">. Returning empty result. Error>>> " + e.getLocalizedMessage());
+            anExceptionOccured = true;
+        }
+       
+        if(!anIOExceptionOccured && anExceptionOccured) {
+            executionStatus.put("pathIsValid", "no");
+        } else if (!anIOExceptionOccured && !anExceptionOccured) {
+            executionStatus.put("pathIsValid", "yes");
+        }
+        return executionStatus;
+    }
+
+
+    /**
+     * This method will return the corresponding JSON Element in a HashMap,
+     * provided that a message context is input.
+     * Resulting HashMap will contain values for the following keys: <br/>   
+     * [1] "errorsExistInReadingStream" - Boolean, <br/>
+     * [2] "pathIsValid" - String (possible values: "yes", "no", "cannot-decide"), <br/>
+     * [3] "evaluatedJsonElement" - Object
+     * @param Message Context
+     * @return A HashMap as stated above
+     */
+	public HashMap<String, Object> getJsonElement(MessageContext synCtx) {
+
+		InputStream jsonStream = null;
+		org.apache.axis2.context.MessageContext amc = ((Axis2MessageContext) synCtx).getAxis2MessageContext();
+		jsonStream = JsonUtil.getJsonPayload(amc);
+
+		return this.getJsonElement(jsonStream);
+	}
+
+
+    /**
+     * This method will check whether a given json-path is valid or not
+     * @param Message Context
+     * @return A string (i.e. "yes", "no", "cannot-decide") specifying the validity of a given json-path
+     * @throws JaxenException 
+     */
+    public String isPathValid(MessageContext synCtx) throws JaxenException {
+        if(isWholeBody){
+            return "yes";
+        } else {           
+           
+            HashMap<String, Object> result = this.getJsonElement(synCtx);       
+            return ((String)(result.get("pathIsValid")));
+        }       
+    }
+    
+    public boolean isPathDefinite(){
+        return jsonPath.isPathDefinite();
+    }
 }
