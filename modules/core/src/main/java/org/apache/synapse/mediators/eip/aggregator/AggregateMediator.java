@@ -472,7 +472,6 @@ public class AggregateMediator extends AbstractMediator implements ManagedLifecy
 
                     if(aggregationExpression instanceof SynapseXPath){
                     	EIPUtils.enrichEnvelope(newCtx.getEnvelope(), synCtx.getEnvelope(), synCtx, (SynapseXPath)aggregationExpression);
-
                     }else if(aggregationExpression instanceof SynapseJsonPath){
                     	EIPUtils.enrichJSONStream(newCtx, synCtx, (SynapseJsonPath)aggregationExpression);
                     }
