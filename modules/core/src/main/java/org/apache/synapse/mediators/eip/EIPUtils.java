@@ -185,9 +185,17 @@ public class EIPUtils {
     }
     
     public static Object getRootJSONObject(MessageContext messageContext) throws JaxenException{
+    	return getRootJSON(messageContext);
+    }
+    
+    public static Object getRootJSONObject(String json) throws JaxenException{
+    	return getRootJSON(json);
+    }
+    
+    private static Object getRootJSON(Object object) throws JaxenException{
     	Object root=null;
-    	Object objectList=rootJsonPath.evaluate(messageContext);
-    	if (objectList != null && objectList instanceof List) { // TODO JSON array uses array list. need to do something else
+    	Object objectList=rootJsonPath.evaluate(object);
+    	if (objectList != null && objectList instanceof List) {
 			List list = (List) objectList;
 			if (list != null && !list.isEmpty()){
 				root = list.get(0);
