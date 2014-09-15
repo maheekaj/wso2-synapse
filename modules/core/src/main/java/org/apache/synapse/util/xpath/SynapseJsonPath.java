@@ -154,13 +154,15 @@ public class SynapseJsonPath extends SynapsePath {
 	@Override
 	public Object evaluate(Object object) throws JaxenException {
 		List result = null;
-		MessageContext synCtx = null;
-		if (object != null && object instanceof MessageContext) {
-			synCtx = (MessageContext) object;
-			result = listValueOf(synCtx);
+		if (object != null){
+			if(object instanceof MessageContext) {
+				MessageContext synCtx = (MessageContext) object;
+    			result = listValueOf(synCtx);
+    		}else if(object instanceof String)
+    			result = listValueOf(IOUtils.toInputStream(object.toString()));
+    		/*if (result == null)
+    			result = new ArrayList();*/
 		}
-		if (result == null)
-			result = new ArrayList();
 		return result;
 	}
     
@@ -196,7 +198,16 @@ public class SynapseJsonPath extends SynapsePath {
 		return null;
 
 	}
-	
+
+	/**
+	 * This method always return a List and it will contains a list as the 0th
+	 * value, if the path is definite. if the path is not a definite list will
+	 * contain multiple element. NULL will return if the path is invalid. Empty
+	 * list will return if the path points to null.
+	 * 
+	 * @param jsonStream
+	 * @return
+	 */
 	private List listValueOf(final InputStream jsonStream) {
         if (jsonStream == null) {
             return null;
@@ -216,8 +227,10 @@ public class SynapseJsonPath extends SynapsePath {
             }
         } catch (IOException e) {
             handleException("Error evaluating JSON Path <" + jsonPath.getPath() + ">", e);
+            result = null;
         } catch (Exception e) { // catch invalid json paths that do not match with the existing JSON payload.
             log.error("#listValueOf. Error evaluating JSON Path <" + jsonPath.getPath() + ">. Returning empty result. Error>>> " + e.getLocalizedMessage());
+            result = null;
         }
         if (log.isDebugEnabled()) {
             log.debug("#listValueOf. Evaluated JSON path <" + jsonPath.getPath() + "> : <null>.");
