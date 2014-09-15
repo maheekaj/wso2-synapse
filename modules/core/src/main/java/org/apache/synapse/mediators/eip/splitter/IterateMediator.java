@@ -103,6 +103,7 @@ public class IterateMediator extends AbstractMediator implements ManagedLifecycl
         }
 
         try {
+        	System.out.println("Iterate Start : " + System.currentTimeMillis());
         	// If the expression is an instance of SynapseXpath then XML version will be used. Otherwise JSON Stream will be used.
         	if(expression!=null && expression instanceof SynapseXPath){
                 // get a copy of the message for the processing, if the continueParent is set to true
@@ -128,10 +129,9 @@ public class IterateMediator extends AbstractMediator implements ManagedLifecycl
     
                 int msgCount = splitElements.size();
                 int msgNumber = 0;
-    
+                
                 // iterate through the list
                 for (Object o : splitElements) {
-    
                     // for the moment iterator will look for an OMNode as the iteration element
                     if (!(o instanceof OMNode)) {
                         handleException("Error splitting message with XPath : "
@@ -157,19 +157,23 @@ public class IterateMediator extends AbstractMediator implements ManagedLifecycl
 				if (expression != null)
 					resultValue = expression.evaluate(synCtx);
 				
+				Object rootObject=EIPUtils.getRootJSONObject((Axis2MessageContext) synCtx);
+				JsonUtil.removeJsonPayload(((Axis2MessageContext) synCtx).getAxis2MessageContext());
+				
 				int msgNumber = 0;
 				int msgCount=0;
 				if(resultValue!=null && resultValue instanceof List){
 					List list=(List)resultValue;
 					msgCount=list.size();
 					for (int i = 0; i < list.size(); i++) {
-						MessageContext itereatedMsgCtx = getIteratedMessage(synCtx, msgNumber++, msgCount, list.get(i));
+						MessageContext itereatedMsgCtx = getIteratedMessage(synCtx, msgNumber++, msgCount, rootObject, list.get(i));
 						ContinuationStackManager.addReliantContinuationState(itereatedMsgCtx, 0, getMediatorPosition());
 						target.mediate(itereatedMsgCtx);
 					}
 				}
-        	
+				JsonUtil.newJsonPayload(((Axis2MessageContext) synCtx).getAxis2MessageContext(), JSONProviderUtil.objectToString(rootObject), true, true);
         	}
+        	System.out.println("Iterate Finish : " + System.currentTimeMillis());
         } catch (JaxenException e) {
             handleException("Error evaluating split XPath expression : " + expression, e, synCtx);
         } catch (AxisFault af) {
@@ -220,10 +224,9 @@ public class IterateMediator extends AbstractMediator implements ManagedLifecycl
      * @throws AxisFault
      * @throws JaxenException
      */
-    private MessageContext getIteratedMessage(MessageContext synCtx, int msgNumber, int msgCount, Object node) throws AxisFault, JaxenException {
+    private MessageContext getIteratedMessage(MessageContext synCtx, int msgNumber, int msgCount, Object rootJsonObject, Object node) throws AxisFault, JaxenException {
     	// clone the message for the mediation in iteration
         MessageContext newCtx = MessageHelper.cloneMessageContext(synCtx);
-
         if (id != null) {
             // set the parent correlation details to the cloned MC -
             //                              for the use of aggregation like tasks
@@ -238,14 +241,14 @@ public class IterateMediator extends AbstractMediator implements ManagedLifecycl
                     EIPConstants.MESSAGE_SEQUENCE,
                     msgNumber + EIPConstants.MESSAGE_SEQUENCE_DELEMITER + msgCount);
         }
-        
         // Initially set the extracted object as root and send if payload is not preserved
         Object rootObject=node;
 
         // if payload should be preserved then attach the iteration element to the
         // node specified by the attachPath
         if (preservePayload) {
-        	rootObject=EIPUtils.getRootJSONObject((Axis2MessageContext) synCtx);
+        	//rootObject=EIPUtils.getRootJSONObject((Axis2MessageContext) synCtx);
+        	rootObject=EIPUtils.getRootJSONObject(JSONProviderUtil.objectToString(rootJsonObject));
         	if(rootObject!=null){
         		rootObject = ((SynapseJsonPath)attachPath).replace(rootObject, node);
         	}else{
