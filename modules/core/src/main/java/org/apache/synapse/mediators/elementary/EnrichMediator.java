@@ -73,6 +73,7 @@ public class EnrichMediator extends AbstractMediator {
     private Target target = null;
 
     public boolean mediate(MessageContext synCtx) {
+    	
         SynapseLog synLog = getLog(synCtx);
 
         if (synLog.isTraceOrDebugEnabled()) {
@@ -84,70 +85,63 @@ public class EnrichMediator extends AbstractMediator {
         }
         
         /*
-         * Check whether the incoming message has a json payload...
-         * By default, incomingMsgHasAJsonPayload is set to false
-         */
-        boolean incomingMsgHasAJsonPayload = false;
-        incomingMsgHasAJsonPayload = 
+         * Check whether the current message context has a json payload... */
+        boolean currentMsgPayloadIsJson = 
         		JsonUtil.hasAJsonPayload(((Axis2MessageContext)synCtx).getAxis2MessageContext());
               
         boolean sourceHasCustom = (this.source.getSourceType() == EnrichMediator.CUSTOM);
         boolean targetHasCustom = (this.target.getTargetType() == EnrichMediator.CUSTOM);
         boolean sourceOrTargetOrBothHasCustom = (sourceHasCustom || targetHasCustom);
         
-        boolean sourcePathIsJson = false;
+        boolean sourceHasACustomJsonPath = false;
+        boolean targetHasACustomJsonPath = false;
+        
         if(sourceHasCustom){
-        	sourcePathIsJson = "JSON_PATH".equals(this.source.getXpath().getPathType());
+        	boolean sourcePathIsJson = "JSON_PATH".equals(this.source.getXpath().getPathType());
+        	sourceHasACustomJsonPath = sourcePathIsJson;
         }
         
-        boolean targetPathIsJson = false;
         if(targetHasCustom){
-        	targetPathIsJson = "JSON_PATH".equals(this.target.getXpath().getPathType());
+        	boolean targetPathIsJson = "JSON_PATH".equals(this.target.getXpath().getPathType());
+        	targetHasACustomJsonPath = targetPathIsJson;
         }
-        
-        boolean sourceHasCustomJsonPath = (sourceHasCustom && sourcePathIsJson);
-        boolean targetHasCustomJsonPath = (targetHasCustom && targetPathIsJson);
         
         /* conditions where native-json-processing is supported... */
         
         boolean cndt1IsTrue = false, cndt2IsTrue = false, cndt3IsTrue = false, cndt4IsTrue = false;
-        cndt1IsTrue = (incomingMsgHasAJsonPayload && !sourceOrTargetOrBothHasCustom);
-        cndt2IsTrue = (incomingMsgHasAJsonPayload && sourceHasCustomJsonPath && !targetHasCustom);
-        cndt3IsTrue = (incomingMsgHasAJsonPayload && !sourceHasCustom && targetHasCustomJsonPath);
-        cndt4IsTrue = (incomingMsgHasAJsonPayload && sourceHasCustomJsonPath && targetHasCustomJsonPath);
+        cndt1IsTrue = (currentMsgPayloadIsJson && !sourceOrTargetOrBothHasCustom);
+        cndt2IsTrue = (currentMsgPayloadIsJson && sourceHasACustomJsonPath && !targetHasCustom);
+        cndt3IsTrue = (currentMsgPayloadIsJson && !sourceHasCustom && targetHasACustomJsonPath);
+        cndt4IsTrue = (currentMsgPayloadIsJson && sourceHasACustomJsonPath && targetHasACustomJsonPath);
         
         if(cndt1IsTrue || cndt2IsTrue || cndt3IsTrue || cndt4IsTrue) {
         	HashMap<String, Object> sourceEvaluationStatus = null;
             try {
-            	/* returning the message block to be enriched from the incoming message */
-            	sourceEvaluationStatus = source.evaluateNew(synCtx, synLog);
+            	/* returning the message block to be used for enriching */
+            	sourceEvaluationStatus = source.evaluateJson(synCtx, synLog);
             } catch (JaxenException e) {
             	handleException("JaxenException : ", e, synCtx);
             }
             if (sourceEvaluationStatus.get("errorsExistInSrcTag").equals(true)) {
                 handleException("Errors do exist in enrich source tag definition, unable to proceed : ", synCtx);
             } else {
-            	/* synCtx: Incoming Message Context, 
+            	/* synCtx: Current Message Context, 
             	evaluatedSrcJsonElement: Json Element to be used for enriching */
                 try {
-                	target.insertNew(synCtx, sourceEvaluationStatus.get("evaluatedSrcJsonElement"), synLog);	                
+                	target.insertJson(synCtx, sourceEvaluationStatus.get("evaluatedSrcJsonElement"), synLog);                
                 } catch (JaxenException e) {
                 	handleException("JaxenException : ", e, synCtx);
-                } catch (AxisFault e) {
-                	handleException("AxisFault : ", e, synCtx);
-                } catch (ParseException e) {
-                	handleException("ParseException : ", e, synCtx);
                 }
             }
         } else {
         	ArrayList<OMNode> sourceNodeList;
             try {
-            	/* returning the message part to be enriched from the incoming message */
+            	/* returning the message block to be used for enriching */
                 sourceNodeList = source.evaluate(synCtx, synLog);
                 if (sourceNodeList == null) {
                     handleException("Failed to get the source for Enriching : ", synCtx);
                 } else {
-                	/* synCtx: Incoming Message Context, 
+                	/* synCtx: Current Message Context,
                 	sourceNodeList: Message part to be enriched from the in.message */
                     target.insert(synCtx, sourceNodeList, synLog);
                 }
