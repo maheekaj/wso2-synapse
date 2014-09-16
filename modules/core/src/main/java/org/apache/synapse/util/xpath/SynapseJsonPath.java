@@ -30,6 +30,7 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.synapse.MessageContext;
 import org.apache.synapse.SynapseConstants;
+import org.apache.synapse.commons.json.JSONProviderUtil;
 import org.apache.synapse.commons.json.JsonUtil;
 import org.apache.synapse.config.SynapsePropertiesLoader;
 import org.apache.synapse.config.xml.SynapsePath;
@@ -78,7 +79,7 @@ public class SynapseJsonPath extends SynapsePath {
         }
         Object read;
         read = jsonPath.read(jsonString,configuration);
-        return (null == read ? "null" : read.toString());
+        return (null == read ? "null" : JSONProviderUtil.objectToString(read));
     }
 
     public String stringValueOf(MessageContext synCtx) {
@@ -125,9 +126,9 @@ public class SynapseJsonPath extends SynapsePath {
         try {
             read = jsonPath.read(jsonStream, configuration);
             if (log.isDebugEnabled()) {
-                log.debug("#stringValueOf. Evaluated JSON path <" + jsonPath.getPath() + "> : <" + (read == null ? null : read.toString()) + ">");
+                log.debug("#stringValueOf. Evaluated JSON path <" + jsonPath.getPath() + "> : <" + (read == null ? null : JSONProviderUtil.objectToString(read)) + ">");
             }
-            return (null == read ? "null" : read.toString());
+            return (null == read ? "null" : JSONProviderUtil.objectToString(read));
         } catch (IOException e) {
             handleException("Error evaluating JSON Path <" + jsonPath.getPath() + ">", e);
         } catch (Exception e) { // catch invalid json paths that do not match with the existing JSON payload.
@@ -212,14 +213,14 @@ public class SynapseJsonPath extends SynapsePath {
         if (jsonStream == null) {
             return null;
         }
-        List result=new ArrayList();
+        List result = new ArrayList();
         Object object;
         try {
         	object = jsonPath.read(jsonStream, configuration);
             if (log.isDebugEnabled()) {
-                log.debug("#listValueOf. Evaluated JSON path <" + jsonPath.getPath() + "> : <" + (object == null ? null : object.toString()) + ">");
+                log.debug("#listValueOf. Evaluated JSON path <" + jsonPath.getPath() + "> : <" + (object == null ? null : JSONProviderUtil.objectToString(object)) + ">");
             }
-            if(object !=null){
+            if(object != null){
             	if(object instanceof List && !jsonPath.isPathDefinite()){
             		result = (List) object;
             	}else
@@ -229,7 +230,7 @@ public class SynapseJsonPath extends SynapsePath {
             handleException("Error evaluating JSON Path <" + jsonPath.getPath() + ">", e);
             result = null;
         } catch (Exception e) { // catch invalid json paths that do not match with the existing JSON payload.
-            log.error("#listValueOf. Error evaluating JSON Path <" + jsonPath.getPath() + ">. Returning empty result. Error>>> " + e.getLocalizedMessage());
+            log.error("#listValueOf. Error evaluating JSON Path <" + jsonPath.getPath() + ">. Returning empty result. Error >>> " + e.getLocalizedMessage());
             result = null;
         }
         if (log.isDebugEnabled()) {
@@ -373,7 +374,7 @@ public class SynapseJsonPath extends SynapsePath {
 				// This section executes if the key is not available. There is a
 				// possibility of having same value more than once and in such a
 				// instances, first value will be removed
-				if (obj.containsValue(currentChild)) {
+				/*if (obj.containsValue(currentChild)) {
 					for (Object key : obj.keySet()) {
 						Object val = obj.get(key);
 						if ((currentChild == null && val == currentChild) ||
@@ -381,7 +382,7 @@ public class SynapseJsonPath extends SynapsePath {
 							rootObject = appendToObject(rootObject, obj, key, child, isSibling);
 						}
 					}
-				}
+				}*/
 			}
 		}
 		return rootObject;
@@ -451,7 +452,7 @@ public class SynapseJsonPath extends SynapsePath {
 			// This section executes if the key is not available. There is a
 			// possibility of having same value more than once and in such a
 			// instances, first value will be removed
-			if (parentMap.containsValue(child)) {
+			/*if (parentMap.containsValue(child)) {
 				for (Object key : parentMap.keySet()) {
 					Object val = parentMap.get(key);
 					if ((child == null && val == child) || child.equals(val)) {
@@ -459,7 +460,7 @@ public class SynapseJsonPath extends SynapsePath {
 						break;
 					}
 				}
-			}
+			}*/
 		}
 		return rootObject;
 	}
@@ -496,7 +497,7 @@ public class SynapseJsonPath extends SynapsePath {
     			// This section executes if the key is not available. There is a
     			// possibility of having same value more than once and in such a
     			// instances, first value will be replaced
-    			if (parentMap.containsValue(child)) {
+    			/*if (parentMap.containsValue(child)) {
     				for (Object key : parentMap.keySet()) {
     					Object val = parentMap.get(key);
     					if ((child == null && val == child) || child.equals(val)) {
@@ -504,7 +505,7 @@ public class SynapseJsonPath extends SynapsePath {
     						break;
     					}
     				}
-    			}
+    			}*/
     		}
 		}
 		return rootObject;
@@ -549,7 +550,7 @@ public class SynapseJsonPath extends SynapsePath {
             executionStatus.put("evaluatedJsonElement", o);
             if (log.isDebugEnabled()) {
                 log.debug("#getJsonElement. Evaluated JSON path <" + jsonPath.getPath() +
-                          "> : <" + (o == null ? null : o.toString()) + ">");
+                          "> : <" + (o == null ? null : JSONProviderUtil.objectToString(o)) + ">");
             }
         } catch (IOException e) {
             handleException("#getJsonElement. Error evaluating JSON Path <" + jsonPath.getPath() + ">", e);
