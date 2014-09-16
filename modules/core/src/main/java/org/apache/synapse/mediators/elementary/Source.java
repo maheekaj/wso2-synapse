@@ -28,6 +28,7 @@ import org.apache.axiom.soap.SOAPHeaderBlock;
 import org.apache.axiom.soap.impl.builder.StAXSOAPModelBuilder;
 import org.apache.synapse.MessageContext;
 import org.apache.synapse.SynapseLog;
+import org.apache.synapse.commons.json.JSONProviderUtil;
 import org.apache.synapse.commons.json.JsonUtil;
 import org.apache.synapse.config.xml.SynapsePath;
 import org.apache.synapse.core.axis2.Axis2MessageContext;
@@ -239,15 +240,24 @@ public class Source {
     }
     
     /**
-     * 
-     * @param synCtx
-     * @param synLog
+     * This method will evaluate a specified source json element
+     * @param synCtx - Current Message Context
+     * @param synLog - Default Logger for the package
      * @return
-     * @throws JaxenException
-     * @throws ParseException
-     */
-    public HashMap<String, Object> evaluateNew(MessageContext synCtx, SynapseLog synLog) throws JaxenException {
+     * A HashMap with the following keys:<br/>
+     * [1] "errorsExistInSrcTag" - holds either true or false<br/>
+     * [2] "evaluatedSrcJsonElement" - holds the evaluated Json Element as an Object
+     * @throws JaxenException */
+    
+    public HashMap<String, Object> evaluateJson(MessageContext synCtx, SynapseLog synLog) throws JaxenException {
     		
+		/**
+		 * Why a HashMap? If we return simply the evaluated json element
+		 * (since we allow null as a valid option in a json), when null is
+		 * returned that can be due to a valid reason as well as due to an error
+		 * in specified path. So to distinguish such occasions, a HashMap with
+		 * an execution status has been used instead. */
+    	
     	HashMap<String, Object> executionStatus = new HashMap<String, Object>();
     	executionStatus.put("errorsExistInSrcTag", false);
     	executionStatus.put("evaluatedSrcJsonElement", null);
@@ -351,7 +361,8 @@ public class Source {
             			 if(o instanceof String){
             				 String s = ((String)o).trim();
             				 /* check if string may contain a json-array or json-object */          				  
-            				 if(s.startsWith("{") || s.startsWith("[")){
+            				 if((s.startsWith("{") && s.endsWith("}")) 
+            						 || (s.startsWith("[") && s.endsWith("]"))) {
             					 /* if yes, try to convert */
             					 sourceJsonElement = EIPUtils.stringtoJSON(s);
             					 if(sourceJsonElement == null){
@@ -407,25 +418,26 @@ public class Source {
         			String inlineText = ((OMText)this.inlineOMNode).getText().trim();
         			/* if inlineText contains beginning-and-ending-double-quotes, 
         			 * it will be considered as a string */
-        			if(inlineText.startsWith("\"") && inlineText.endsWith("\"")){
+        			if(inlineText.startsWith("\"") && inlineText.endsWith("\"")) {
         				sourceJsonElement = inlineText = inlineText.substring(1, inlineText.length()-1);
         			}else{
         				/* check if in-line text may contain a json-array or json-object */           			
-            			if(inlineText.startsWith("{") || inlineText.startsWith("[")){	
+            			if((inlineText.startsWith("{") && inlineText.endsWith("}")) 
+            					|| (inlineText.startsWith("[") && inlineText.endsWith("]"))) {	
             				/* if yes, try to convert */
             				sourceJsonElement = EIPUtils.stringtoJSON(inlineText);
-            				if(sourceJsonElement == null){
+            				if(sourceJsonElement == null) {
             					sourceJsonElement = inlineText;
             				}
-            			}else{
-                			if(Source.isNumeric(inlineText)){
+            			} else {
+                			if(Source.isNumeric(inlineText)) {
                 				sourceJsonElement = new Double(inlineText);
-                			}else if("true".equals(inlineText.toLowerCase()) 
-                					|| "false".equals(inlineText.toLowerCase())){
+                			} else if ("true".equals(inlineText.toLowerCase()) 
+                					|| "false".equals(inlineText.toLowerCase())) {
                 				sourceJsonElement = new Boolean(inlineText);
-                			}else if("null".equals(inlineText.toLowerCase()) || "".equals(inlineText)){
+                			} else if ("null".equals(inlineText.toLowerCase()) || "".equals(inlineText)) {
                 				sourceJsonElement = null;
-                			}else{
+                			} else {
                 				sourceJsonElement = inlineText;
                 			}
             			}
@@ -433,7 +445,7 @@ public class Source {
         		}
         	} else if (this.inlineKey != null && !this.inlineKey.isEmpty()) {
         		Object inlineKeyObj = synCtx.getEntry(inlineKey);
-        		if(inlineKeyObj != null){
+        		if(inlineKeyObj != null) {
         			if (inlineKeyObj instanceof OMElement) {
             			/**
             			 * If target type is custom, this will be attached as a string
@@ -453,25 +465,26 @@ public class Source {
             			String inlineText = ((String)inlineKeyObj).trim();
             			/* if inlineText contains beginning-and-ending-double-quotes, 
             			 * it will be considered as a string */
-            			if(inlineText.startsWith("\"") && inlineText.endsWith("\"")){
+            			if(inlineText.startsWith("\"") && inlineText.endsWith("\"")) {
             				sourceJsonElement = inlineText = inlineText.substring(1, inlineText.length()-1);
             			}else{
             				/* check if in-line text may contain a json-array or json-object */           			
-                			if(inlineText.startsWith("{") || inlineText.startsWith("[")){		
+                			if((inlineText.startsWith("{") && inlineText.endsWith("}")) 
+                					|| (inlineText.startsWith("[") && inlineText.endsWith("]"))) {	
                 				/* if yes, try to convert */
                 				sourceJsonElement = EIPUtils.stringtoJSON(inlineText);
-                				if(sourceJsonElement == null){
+                				if(sourceJsonElement == null) {
                 					sourceJsonElement = inlineText;
                 				}
                 			}else{
-                    			if(Source.isNumeric(inlineText)){
+                    			if(Source.isNumeric(inlineText)) {
                     				sourceJsonElement = new Double(inlineText);
-                    			}else if("true".equals(inlineText.toLowerCase()) 
+                    			} else if ("true".equals(inlineText.toLowerCase()) 
                     					|| "false".equals(inlineText.toLowerCase())){
                     				sourceJsonElement = new Boolean(inlineText);
-                    			}else if("null".equals(inlineText.toLowerCase()) || "".equals(inlineText)){
+                    			} else if ("null".equals(inlineText.toLowerCase()) || "".equals(inlineText)) {
                     				sourceJsonElement = null;
-                    			}else{
+                    			} else {
                     				sourceJsonElement = inlineText;
                     			}
                 			}
@@ -490,12 +503,13 @@ public class Source {
         return executionStatus;
     }
     
-    /**
-     * 
-     * @param str
-     * @return
-     */
-    private static boolean isNumeric(String str){  
+	/**
+	 * This method will check if a given string is a number 
+	 * representation or not
+	 * @param str - Input string
+	 * @return a boolean
+	 */
+    private static boolean isNumeric(String str) {  
     	try{  
     		Double.parseDouble(str);
     	}catch(NumberFormatException e){  
