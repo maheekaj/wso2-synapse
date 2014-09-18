@@ -103,7 +103,6 @@ public class IterateMediator extends AbstractMediator implements ManagedLifecycl
         }
 
         try {
-        	System.out.println("Iterate Start : " + System.currentTimeMillis());
         	// If the expression is an instance of SynapseXpath then XML version will be used. Otherwise JSON Stream will be used.
         	if(expression!=null && expression instanceof SynapseXPath){
                 // get a copy of the message for the processing, if the continueParent is set to true
@@ -173,9 +172,8 @@ public class IterateMediator extends AbstractMediator implements ManagedLifecycl
 				}
 				JsonUtil.newJsonPayload(((Axis2MessageContext) synCtx).getAxis2MessageContext(), JSONProviderUtil.objectToString(rootObject), true, true);
         	}
-        	System.out.println("Iterate Finish : " + System.currentTimeMillis());
         } catch (JaxenException e) {
-            handleException("Error evaluating split XPath expression : " + expression, e, synCtx);
+            handleException("Error evaluating split Path expression : " + expression, e, synCtx);
         } catch (AxisFault af) {
             handleException("Error creating an iterated copy of the message", af, synCtx);
         }

@@ -21,6 +21,7 @@ package org.apache.synapse.util.xpath;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -39,6 +40,7 @@ import org.jaxen.JaxenException;
 
 import com.jayway.jsonpath.Configuration;
 import com.jayway.jsonpath.JsonPath;
+import com.jayway.jsonpath.Option;
 import com.jayway.jsonpath.internal.PathTokenizer;
 import com.jayway.jsonpath.spi.impl.JacksonProvider;
 
@@ -53,7 +55,11 @@ public class SynapseJsonPath extends SynapsePath {
     private static Configuration configuration;
     
     static{
-    	configuration = Configuration.builder().jsonProvider(new JacksonProvider()).build();
+    	/*
+    	 * JacksonProvider : set to use Jackson API
+    	 * Option : Throw exception if path invalid
+    	 */
+    	configuration = Configuration.builder().jsonProvider(new JacksonProvider()).options(EnumSet.allOf(Option.class)).build();
     }
 
     private boolean isWholeBody = false;
@@ -228,10 +234,9 @@ public class SynapseJsonPath extends SynapsePath {
             }
         } catch (IOException e) {
             handleException("Error evaluating JSON Path <" + jsonPath.getPath() + ">", e);
-            result = null;
         } catch (Exception e) { // catch invalid json paths that do not match with the existing JSON payload.
             log.error("#listValueOf. Error evaluating JSON Path <" + jsonPath.getPath() + ">. Returning empty result. Error >>> " + e.getLocalizedMessage());
-            result = null;
+            handleException("Error evaluating JSON Path <" + jsonPath.getPath() + ">", e);
         }
         if (log.isDebugEnabled()) {
             log.debug("#listValueOf. Evaluated JSON path <" + jsonPath.getPath() + "> : <null>.");
@@ -371,18 +376,6 @@ public class SynapseJsonPath extends SynapsePath {
 						return rootObject;
 					}
 				}
-				// This section executes if the key is not available. There is a
-				// possibility of having same value more than once and in such a
-				// instances, first value will be removed
-				/*if (obj.containsValue(currentChild)) {
-					for (Object key : obj.keySet()) {
-						Object val = obj.get(key);
-						if ((currentChild == null && val == currentChild) ||
-						    currentChild.equals(val)) {
-							rootObject = appendToObject(rootObject, obj, key, child, isSibling);
-						}
-					}
-				}*/
 			}
 		}
 		return rootObject;
@@ -449,18 +442,6 @@ public class SynapseJsonPath extends SynapsePath {
 					return rootObject;
 				}
 			}
-			// This section executes if the key is not available. There is a
-			// possibility of having same value more than once and in such a
-			// instances, first value will be removed
-			/*if (parentMap.containsValue(child)) {
-				for (Object key : parentMap.keySet()) {
-					Object val = parentMap.get(key);
-					if ((child == null && val == child) || child.equals(val)) {
-						parentMap.remove(skey);
-						break;
-					}
-				}
-			}*/
 		}
 		return rootObject;
 	}
@@ -494,18 +475,6 @@ public class SynapseJsonPath extends SynapsePath {
     					return rootObject;
     				}
     			}
-    			// This section executes if the key is not available. There is a
-    			// possibility of having same value more than once and in such a
-    			// instances, first value will be replaced
-    			/*if (parentMap.containsValue(child)) {
-    				for (Object key : parentMap.keySet()) {
-    					Object val = parentMap.get(key);
-    					if ((child == null && val == child) || child.equals(val)) {
-    						parentMap.put(key, newChild);
-    						break;
-    					}
-    				}
-    			}*/
     		}
 		}
 		return rootObject;

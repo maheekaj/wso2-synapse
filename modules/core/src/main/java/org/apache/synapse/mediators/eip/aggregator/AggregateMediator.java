@@ -35,9 +35,12 @@ import org.apache.synapse.ManagedLifecycle;
 import org.apache.synapse.MessageContext;
 import org.apache.synapse.SynapseException;
 import org.apache.synapse.SynapseLog;
+import org.apache.synapse.commons.json.JSONProviderUtil;
+import org.apache.synapse.commons.json.JsonUtil;
 import org.apache.synapse.config.xml.SynapsePath;
 import org.apache.synapse.continuation.ContinuationStackManager;
 import org.apache.synapse.core.SynapseEnvironment;
+import org.apache.synapse.core.axis2.Axis2MessageContext;
 import org.apache.synapse.mediators.AbstractMediator;
 import org.apache.synapse.mediators.FlowContinuableMediator;
 import org.apache.synapse.mediators.Value;
@@ -446,9 +449,8 @@ public class AggregateMediator extends AbstractMediator implements ManagedLifecy
      * @return the aggregated message context
      */
     private MessageContext getAggregatedMessage(Aggregate aggregate) {
-
         MessageContext newCtx = null;
-
+        Object jsonPayload=null;
         for (MessageContext synCtx : aggregate.getMessages()) {
             
             if (newCtx == null) {
@@ -473,7 +475,9 @@ public class AggregateMediator extends AbstractMediator implements ManagedLifecy
                     if(aggregationExpression instanceof SynapseXPath){
                     	EIPUtils.enrichEnvelope(newCtx.getEnvelope(), synCtx.getEnvelope(), synCtx, (SynapseXPath)aggregationExpression);
                     }else if(aggregationExpression instanceof SynapseJsonPath){
-                    	EIPUtils.enrichJSONStream(newCtx, synCtx, (SynapseJsonPath)aggregationExpression);
+                    	if(jsonPayload == null)
+                    		jsonPayload=EIPUtils.getRootJSONObject(newCtx);
+                    	EIPUtils.enrichJSONSStream(jsonPayload, synCtx, (SynapseJsonPath)aggregationExpression);
                     }
                     
                     if (log.isDebugEnabled()) {
@@ -488,7 +492,9 @@ public class AggregateMediator extends AbstractMediator implements ManagedLifecy
                 }
             }
         }
-
+        if(aggregationExpression instanceof SynapseJsonPath && newCtx!=null && jsonPayload!=null){
+        	JsonUtil.newJsonPayload(((Axis2MessageContext) newCtx).getAxis2MessageContext(), JSONProviderUtil.objectToString(jsonPayload), true, true);
+        }
         // Enclose with a parent element if EnclosingElement is defined
         if (enclosingElementPropertyName != null) {
 
@@ -516,7 +522,6 @@ public class AggregateMediator extends AbstractMediator implements ManagedLifecy
                                 enclosingElementPropertyName + " not found ", newCtx);
             }
         }
-
         return newCtx;
     }
 
