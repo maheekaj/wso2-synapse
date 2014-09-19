@@ -32,9 +32,6 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.synapse.MessageContext;
 import org.apache.synapse.SynapseException;
-import org.apache.synapse.commons.json.JSONProviderUtil;
-import org.apache.synapse.commons.json.JsonUtil;
-import org.apache.synapse.core.axis2.Axis2MessageContext;
 import org.apache.synapse.util.xpath.SynapseJsonPath;
 import org.apache.synapse.util.xpath.SynapseXPath;
 import org.jaxen.JaxenException;
@@ -163,22 +160,22 @@ public class EIPUtils {
         }
     }
     
-    public static void enrichJSONStream(MessageContext messageContext, MessageContext enricherContext, SynapseJsonPath expression) throws JaxenException{
+    public static void enrichJSONSStream(Object rootJsonObject, MessageContext enricherContext, SynapseJsonPath expression) throws JaxenException{
     	Object newItemsObj=expression.evaluate(enricherContext);
     	if(newItemsObj!=null && newItemsObj instanceof List && !((List)newItemsObj).isEmpty()){
     		// find root element
-    		Object root = getRootJSONObject(messageContext);
-			if (root != null){
+    		//Object root = getRootJSONObject(messageContext);
+			if (rootJsonObject != null){
     			// find existing 0th item from the stream
         		//Object parent = expression.findParent(root);
         		// Iterate through new elements and add to parent element
         		
         		//if(parent!=null){
                 	for(Object item:(List)newItemsObj){
-                		root = expression.appendToParent(root, item);
+                		rootJsonObject = expression.appendToParent(rootJsonObject, item);
                 	}
                 	// write the new JSON message to the stream
-                	JsonUtil.newJsonPayload(((Axis2MessageContext) messageContext).getAxis2MessageContext(), JSONProviderUtil.objectToString(root), true, true);
+                	//JsonUtil.newJsonPayload(((Axis2MessageContext) messageContext).getAxis2MessageContext(), JSONProviderUtil.objectToString(root), true, true);
                	//}
 			}
     	}
