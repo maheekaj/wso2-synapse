@@ -57,9 +57,11 @@ public class SynapseJsonPath extends SynapsePath {
     static{
     	/*
     	 * JacksonProvider : set to use Jackson API
-    	 * Option : Throw exception if path invalid
+    	 * Option : Throw an exception, if path is invalid
     	 */
-    	configuration = Configuration.builder().jsonProvider(new JacksonProvider()).options(EnumSet.allOf(Option.class)).build();
+    	configuration = 
+    			Configuration.builder().jsonProvider
+    			(new JacksonProvider()).options(EnumSet.allOf(Option.class)).build();
     }
 
     private boolean isWholeBody = false;
@@ -139,7 +141,7 @@ public class SynapseJsonPath extends SynapsePath {
             handleException("Error evaluating JSON Path <" + jsonPath.getPath() + ">", e);
         } catch (Exception e) { // catch invalid json paths that do not match with the existing JSON payload.
             log.error("#stringValueOf. Error evaluating JSON Path <" + jsonPath.getPath() + ">. Returning empty result. Error>>> " + e.getLocalizedMessage());
-            return "";
+            handleException("Error evaluating JSON Path <" + jsonPath.getPath() + ">", e);
         }
         if (log.isDebugEnabled()) {
             log.debug("#stringValueOf. Evaluated JSON path <" + jsonPath.getPath() + "> : <null>.");
@@ -195,8 +197,7 @@ public class SynapseJsonPath extends SynapsePath {
 				}
 				return listValueOf(stream);
 			} catch (IOException e) {
-				handleException("Could not find JSON Stream in PassThrough Pipe during JSON path evaluation.",
-				                e);
+				handleException("Could not find JSON Stream in PassThrough Pipe during JSON path evaluation.", e);
 			}
 		} else {
 			stream = JsonUtil.getJsonPayload(amc);
@@ -224,18 +225,21 @@ public class SynapseJsonPath extends SynapsePath {
         try {
         	object = jsonPath.read(jsonStream, configuration);
             if (log.isDebugEnabled()) {
-                log.debug("#listValueOf. Evaluated JSON path <" + jsonPath.getPath() + "> : <" + (object == null ? null : JSONProviderUtil.objectToString(object)) + ">");
+                log.debug("#listValueOf. Evaluated JSON path <" + jsonPath.getPath()
+                          + "> : <" + (object == null ? null : JSONProviderUtil.objectToString(object)) + ">");
             }
             if(object != null){
             	if(object instanceof List && !jsonPath.isPathDefinite()){
-            		result = (List) object;
-            	}else
+            		result = (List)object;
+            	} else {
             		result.add(object);
+            	}           		
             }
         } catch (IOException e) {
             handleException("Error evaluating JSON Path <" + jsonPath.getPath() + ">", e);
         } catch (Exception e) { // catch invalid json paths that do not match with the existing JSON payload.
-            log.error("#listValueOf. Error evaluating JSON Path <" + jsonPath.getPath() + ">. Returning empty result. Error >>> " + e.getLocalizedMessage());
+            log.error("#listValueOf. Error evaluating JSON Path <" + jsonPath.getPath() + 
+                      		">. Returning empty result. Error >>> " + e.getLocalizedMessage());
             handleException("Error evaluating JSON Path <" + jsonPath.getPath() + ">", e);
         }
         if (log.isDebugEnabled()) {
@@ -317,7 +321,7 @@ public class SynapseJsonPath extends SynapsePath {
 		Object parent = findParent(rootObject);
 		if (parent == null) {
 			if (isWholeBody) {
-				if (!(rootObject instanceof List)) {
+				if (isSibling || !(rootObject instanceof List)) {
 					List array = new ArrayList<Object>();
 					array.add(rootObject);
 					rootObject = array;
@@ -364,9 +368,10 @@ public class SynapseJsonPath extends SynapsePath {
 		if (parent != null && parent instanceof List) {
 			((List) parent).add(child);
 		} else if (parent != null && parent instanceof Map) {
+			/* should we add following line */
 			parent = findParent(rootObject);
 			Object currentChild = jsonPath.find(rootObject);
-			if (parent != null && currentChild != null) {
+			if (parent != null/* && currentChild != null*/) {
 				String skey = getLastToken();
 				Map obj = (Map) parent;
 				if (obj.containsKey(skey)) {
@@ -400,18 +405,23 @@ public class SynapseJsonPath extends SynapsePath {
 	 *            true if the new item add as a sibling
 	 * @return Updated root object
 	 */
-	private Object appendToObject(Object rootObject, Map parent, Object key, Object child,
-	                              boolean isSibling) {
-		if (parent != null && parent.containsKey(key)) {
-			Object existingValue = parent.get(key);
-			if (!isSibling && existingValue instanceof List) {
-				List array = (List) existingValue;
-				array.add(child);
+	public Object appendToObject(Object rootObject, Map parent, Object key, Object child, boolean isSibling) {
+		if (key == null)
+			key = "default_key";
+		if (parent != null) {
+			if (parent.containsKey(key)) {
+				Object existingValue = parent.get(key);
+				if (!isSibling && existingValue instanceof List) {
+					List array = (List) existingValue;
+					array.add(child);
+				} else {
+					List array = new ArrayList();
+					array.add(existingValue);
+					array.add(child);
+					parent.put(key, array);
+				}
 			} else {
-				List array = new ArrayList();
-				array.add(existingValue);
-				array.add(child);
-				parent.put(key, array);
+				parent.put(key, child);
 			}
 		}
 		return rootObject;
@@ -562,19 +572,26 @@ public class SynapseJsonPath extends SynapsePath {
 
 
     /**
-     * This method will check whether a given json-path is valid or not
-     * @param Message Context
-     * @return A string (i.e. "yes", "no", "cannot-decide") specifying the validity of a given json-path
-     * @throws JaxenException 
+     * This method will stop executing the calling function in case of an exception
+     * due to an error in finding the specified path
+     * @param synCtx Message Context
      */
-    public String isPathValid(MessageContext synCtx) throws JaxenException {
+    public void exitIfAnErrorExistsInFindingPath(MessageContext synCtx){
         if(isWholeBody){
-            return "yes";
-        } else {           
-           
-            HashMap<String, Object> result = this.getJsonElement(synCtx);       
-            return ((String)(result.get("pathIsValid")));
-        }       
+            return;
+        } else {             
+        	InputStream jsonStream = null;
+    		org.apache.axis2.context.MessageContext amc = ((Axis2MessageContext) synCtx).getAxis2MessageContext();
+    		jsonStream = JsonUtil.getJsonPayload(amc);
+        	try {
+	            this.jsonPath.read(jsonStream, configuration);
+            } catch (IOException e) {
+            	handleException("Error evaluating JSON Path <" + jsonPath.getPath() + ">", e);
+            } catch (Exception e) {
+            	handleException("Error evaluating JSON Path <" + jsonPath.getPath() + ">", e);
+            }
+        	return;
+        }      
     }
     
     public boolean isPathDefinite(){
