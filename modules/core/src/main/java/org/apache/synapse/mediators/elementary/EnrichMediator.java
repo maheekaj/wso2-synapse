@@ -18,10 +18,7 @@
  */
 package org.apache.synapse.mediators.elementary;
 
-import net.minidev.json.parser.ParseException;
-
 import org.apache.axiom.om.OMNode;
-import org.apache.axis2.AxisFault;
 import org.apache.synapse.MessageContext;
 import org.apache.synapse.SynapseLog;
 import org.apache.synapse.commons.json.JsonUtil;
@@ -58,6 +55,7 @@ import java.util.HashMap;
  */
 
 public class EnrichMediator extends AbstractMediator {
+	
     public static final int CUSTOM = 0;
 
     public static final int ENVELOPE = 1;
@@ -84,37 +82,7 @@ public class EnrichMediator extends AbstractMediator {
             }
         }
         
-        /*
-         * Check whether the current message context has a json payload... */
-        boolean currentMsgPayloadIsJson = 
-        		JsonUtil.hasAJsonPayload(((Axis2MessageContext)synCtx).getAxis2MessageContext());
-              
-        boolean sourceHasCustom = (this.source.getSourceType() == EnrichMediator.CUSTOM);
-        boolean targetHasCustom = (this.target.getTargetType() == EnrichMediator.CUSTOM);
-        boolean sourceOrTargetOrBothHasCustom = (sourceHasCustom || targetHasCustom);
-        
-        boolean sourceHasACustomJsonPath = false;
-        boolean targetHasACustomJsonPath = false;
-        
-        if(sourceHasCustom){
-        	boolean sourcePathIsJson = "JSON_PATH".equals(this.source.getXpath().getPathType());
-        	sourceHasACustomJsonPath = sourcePathIsJson;
-        }
-        
-        if(targetHasCustom){
-        	boolean targetPathIsJson = "JSON_PATH".equals(this.target.getXpath().getPathType());
-        	targetHasACustomJsonPath = targetPathIsJson;
-        }
-        
-        /* conditions where native-json-processing is supported... */
-        
-        boolean cndt1IsTrue = false, cndt2IsTrue = false, cndt3IsTrue = false, cndt4IsTrue = false;
-        cndt1IsTrue = (currentMsgPayloadIsJson && !sourceOrTargetOrBothHasCustom);
-        cndt2IsTrue = (currentMsgPayloadIsJson && sourceHasACustomJsonPath && !targetHasCustom);
-        cndt3IsTrue = (currentMsgPayloadIsJson && !sourceHasCustom && targetHasACustomJsonPath);
-        cndt4IsTrue = (currentMsgPayloadIsJson && sourceHasACustomJsonPath && targetHasACustomJsonPath);
-        
-        if(cndt1IsTrue || cndt2IsTrue || cndt3IsTrue || cndt4IsTrue) {
+        if(this.isNativeJsonSupportEnabled(synCtx)) {
         	HashMap<String, Object> sourceEvaluationStatus = null;
             try {
             	/* returning the message block to be used for enriching */
@@ -125,10 +93,10 @@ public class EnrichMediator extends AbstractMediator {
             if (sourceEvaluationStatus.get("errorsExistInSrcTag").equals(true)) {
                 handleException("Errors do exist in enrich source tag definition, unable to proceed : ", synCtx);
             } else {
-            	/* synCtx: Current Message Context, 
+            	/* synCtx: Current Message Context,
             	evaluatedSrcJsonElement: Json Element to be used for enriching */
                 try {
-                	target.insertJson(synCtx, sourceEvaluationStatus.get("evaluatedSrcJsonElement"), synLog);                
+                	target.insertJson(synCtx, sourceEvaluationStatus.get("evaluatedSrcJsonElement"), synLog);               
                 } catch (JaxenException e) {
                 	handleException("JaxenException : ", e, synCtx);
                 }
@@ -152,6 +120,42 @@ public class EnrichMediator extends AbstractMediator {
 
         synLog.traceOrDebug("End : Enrich mediator");
         return true;
+    }
+    
+    private boolean isNativeJsonSupportEnabled(MessageContext synCtx) {
+    	
+    	/* Check whether the current message context has a json payload or not... */
+        boolean currentMsgPayloadIsJson = 
+        		JsonUtil.hasAJsonPayload(((Axis2MessageContext)synCtx).getAxis2MessageContext());
+              
+        boolean sourceHasCustom = (this.source.getSourceType() == EnrichMediator.CUSTOM);
+        boolean targetHasCustom = (this.target.getTargetType() == EnrichMediator.CUSTOM);
+        boolean enrichHasCustom = (sourceHasCustom || targetHasCustom);
+        
+        boolean sourceHasACustomJsonPath = false;
+        boolean targetHasACustomJsonPath = false;
+        
+        if(sourceHasCustom){
+        	boolean sourcePathIsJson = "JSON_PATH".equals(this.source.getXpath().getPathType());
+        	sourceHasACustomJsonPath = sourcePathIsJson;
+        }
+        
+        if(targetHasCustom){
+        	boolean targetPathIsJson = "JSON_PATH".equals(this.target.getXpath().getPathType());
+        	targetHasACustomJsonPath = targetPathIsJson;
+        }
+        
+        // boolean enrichHasCustomJsonPaths = (sourceHasACustomJsonPath || targetHasACustomJsonPath);
+        
+        /* conditions where native-json-processing is supported... */
+        
+        boolean cndt1IsTrue = false, cndt2IsTrue = false, cndt3IsTrue = false, cndt4IsTrue = false;
+        cndt1IsTrue = (currentMsgPayloadIsJson && !enrichHasCustom);
+        cndt2IsTrue = (currentMsgPayloadIsJson && sourceHasACustomJsonPath && !targetHasCustom);
+        cndt3IsTrue = (currentMsgPayloadIsJson && !sourceHasCustom && targetHasACustomJsonPath);
+        cndt4IsTrue = (currentMsgPayloadIsJson && sourceHasACustomJsonPath && targetHasACustomJsonPath);
+        
+    	return (cndt1IsTrue || cndt2IsTrue || cndt3IsTrue || cndt4IsTrue);
     }
 
     public Source getSource() {
