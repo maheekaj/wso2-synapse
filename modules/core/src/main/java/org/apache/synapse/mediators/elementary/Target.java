@@ -19,11 +19,8 @@
 package org.apache.synapse.mediators.elementary;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-
-import net.minidev.json.parser.ParseException;
 
 import org.apache.axiom.om.OMAttribute;
 import org.apache.axiom.om.OMElement;
@@ -87,7 +84,7 @@ public class Target {
             assert xpath != null : "Xpath cannot be null for CUSTOM";
 
             if (sourceNodeList.isEmpty()) {
-                synLog.error("Cannot Enrich message from an empty source.");
+                synLog.error("Cannot enrich message from an empty source.");
                 return;
             }
 
@@ -228,11 +225,13 @@ public class Target {
     		
     		if(this.xpath != null) {
     		       		
-        		SynapseJsonPath targetJsonPath = (SynapseJsonPath)xpath;
+        		SynapseJsonPath targetJsonPath = (SynapseJsonPath)xpath;      		
         		boolean targetPathIsDefinite = targetJsonPath.isPathDefinite();
-        		boolean targetPathIsValid = targetJsonPath.isPathValid(synCtx).equals("yes");
         		
-        		if(targetPathIsDefinite && targetPathIsValid) {
+        		if(targetPathIsDefinite) {
+        			/* See if path is valid to be considered 
+        			 * If not valid, following line will result in an exception and stop proceeding further */
+        			targetJsonPath.exitIfAnErrorExistsInFindingPath(synCtx); 
         			/* only if target-path-is-definite and target-path-is-valid, 
         			 * a new element will be considered to be attached */
         			Object currentJsonPayload = null, newJsonPayload = null;
@@ -259,17 +258,28 @@ public class Target {
             			
                     } else if (action.equals(ACTION_ADD_CHILD)) {
                     
-                    	HashMap<String, Object> result = targetJsonPath.getJsonElement(synCtx);
-                    	Object targetJsonElement = result.get("evaluatedJsonElement");
+                    	/*HashMap<String, Object> result = targetJsonPath.getJsonElement(synCtx);
+                    	Object targetJsonElement = result.get("evaluatedJsonElement");*/
+                    	Object targetJsonElement = targetJsonPath.find(currentJsonPayload);
+                    	
                     	if(targetJsonElement instanceof List) {
                     		newJsonPayload = targetJsonPath.append(currentJsonPayload, sourceJsonElement);
                     		/* creating the new message payload with enriched json element */
                             JsonUtil.newJsonPayload(((Axis2MessageContext)synCtx).getAxis2MessageContext(),
                             		                JSONProviderUtil.objectToString(newJsonPayload), true, true);
+                    	} else if(targetJsonElement instanceof Map) {
+                    		
+                    		Object key = synCtx.getProperty("ENRICH_TARGET_CHILD_KEY");      		
+                    		newJsonPayload = targetJsonPath.appendToObject
+                    				(currentJsonPayload, ((Map<?,?>)targetJsonElement), key, sourceJsonElement, false);
+                    		/* creating the new message payload with enriched json element */
+                            JsonUtil.newJsonPayload(((Axis2MessageContext)synCtx).getAxis2MessageContext(),
+                            		                JSONProviderUtil.objectToString(newJsonPayload), true, true);
+                  
                     	} else {
                     		synLog.error("Error executing Target-type 'custom' with action 'child' : " +
-                					"Target json element currently does not hold a JSON Array to which " +
-                					"a new child can be attached");
+                					"Targeted json element currently does not hold either a JSON Array " +
+                					"or JSON Object to which a new child can be attached");
                     	}                  	
                     	
                     } else if (action.equals(ACTION_ADD_SIBLING)) {
@@ -280,14 +290,7 @@ public class Target {
                                                     JSONProviderUtil.objectToString(newJsonPayload), true, true);
                     }
         		} else {
-        			
-        			if(!targetPathIsDefinite) {
-        				synLog.error("Error executing Target-type 'custom' : Json-path is not definite");
-        			}
-        			if(!targetPathIsValid) {
-        				synLog.error("Error executing Target-type 'custom' : " +
-            					"Specified target json-path does not exist in the incoming message body");
-        			}      			
+        			synLog.error("Error executing Target-type 'custom' : Json-path has to be definite");
         		}
         		
     		} else { 			
@@ -314,24 +317,27 @@ public class Target {
         		}
             } else if (action.equals(ACTION_ADD_CHILD)) {
             	
-            	Object currentJsonPayload = null;
+            	Object currentJsonPayload = null, newJsonPayload = null;
         		currentJsonPayload = EIPUtils.getRootJSONObject((Axis2MessageContext)synCtx);
+        		SynapseJsonPath targetJsonPath = new SynapseJsonPath("$");    
         		
         		/* check if currentJsonPayload is a JSON Array
         		 * if 'yes', attach sourceJsonElement as a child
         		 * if 'not', skip */
         		if(currentJsonPayload instanceof List){
-        			Object newJsonPayload = null;
-        			SynapseJsonPath targetJsonPath = new SynapseJsonPath("$");            		
+        			      		
         			newJsonPayload = targetJsonPath.append(currentJsonPayload, sourceJsonElement);
-        			/* creating the new message payload with enriched json element */
-                	JsonUtil.newJsonPayload(((Axis2MessageContext)synCtx).getAxis2MessageContext(),
-                	                                JSONProviderUtil.objectToString(newJsonPayload), true, true);
-        		} else {
-        			synLog.error("Error executing Target-type 'body' with action 'child' : " +
-        					"Current message payload holds a JSON Object to which " +
-        					"a new child cannot be attached without defining a key");
+
+        		} else {  /* when currentJsonPayload instanceof Map */
+        			
+        			Object key = synCtx.getProperty("ENRICH_TARGET_CHILD_KEY");   
+            		newJsonPayload = targetJsonPath.appendToObject
+            				(currentJsonPayload, ((Map<?,?>)currentJsonPayload), key, sourceJsonElement, false);
         		}
+        		
+        		/* creating the new message payload with enriched json element */
+            	JsonUtil.newJsonPayload(((Axis2MessageContext)synCtx).getAxis2MessageContext(),
+            	                                JSONProviderUtil.objectToString(newJsonPayload), true, true);
         			
             } else if (action.equals(ACTION_ADD_SIBLING)) {
             	
@@ -351,7 +357,7 @@ public class Target {
         		newArrayList.add(sourceJsonElement);        		
         		newArrayList.trimToSize();       		
         		newJsonPayload = newArrayList;
-        		
+
         		/* creating the new message payload with enriched json element */
             	JsonUtil.newJsonPayload(((Axis2MessageContext)synCtx).getAxis2MessageContext(),
             	                           JSONProviderUtil.objectToString(newJsonPayload), true, true);
@@ -361,12 +367,14 @@ public class Target {
         	if(property != null && !property.isEmpty()){
             	if (action.equals(ACTION_REPLACE)) {
             		
-            		if(sourceJsonElement instanceof Map || sourceJsonElement instanceof List){
+            		if(sourceJsonElement instanceof Map 
+            				|| sourceJsonElement instanceof List 
+            					|| sourceJsonElement instanceof String){
             			synCtx.setProperty(property, JSONProviderUtil.objectToString(sourceJsonElement));
-            		} else if (sourceJsonElement == null){
-            			synCtx.setProperty(property, "null");
-            		} else {
+            		} else if (sourceJsonElement != null){
             			synCtx.setProperty(property, sourceJsonElement);
+            		} else {
+            			synCtx.setProperty(property, "null");
             		}
                 } else if (action.equals(ACTION_ADD_CHILD)) {
 
@@ -377,58 +385,73 @@ public class Target {
                 			/* check if string may contain a json-array */
                 			if(s.startsWith("[") && s.endsWith("]")) {
                 				/* if yes, try to convert */
-           					 	Object jsonArray = EIPUtils.stringtoJSON(s);
+           					 	Object jsonArray = EIPUtils.getRootJSONObject(s);
            					 	if(jsonArray != null){
            					 		/* if not null, 'jsonArray' must now contain the corresponding json array 
            					 		 * Only then, sourceJsonElement can be inserted as a child */
-               					 	SynapseJsonPath targetJsonPath = new SynapseJsonPath("$.");            		
+               					 	SynapseJsonPath targetJsonPath = new SynapseJsonPath("$");            		
                             		Object newJsonElement = targetJsonPath.append(jsonArray, sourceJsonElement);
                             		synCtx.setProperty(property, JSONProviderUtil.objectToString(newJsonElement));
            					 	} else {
                					 	synLog.error("Error executing Target-type 'property' with action 'child' : " +
-                            			"Original value of property " + property + "does not hold a valid object " +
-                            			"representation (should be a JSON Array String) to take source as a child");
+                            			"Original value of property " + property + " does not hold a valid object " +
+                            			"representation (should be a JSON Array or JSON Object String) " +
+                            			"to take source as a child");
            					 	}
+                			} else if(s.startsWith("{") && s.endsWith("}")) {
+                				/* if yes, try to convert */
+           					 	Object jsonObject = EIPUtils.getRootJSONObject(s);
+           					 	if(jsonObject != null){
+        					 		/* if not null, 'jsonObject' must now contain the corresponding json object
+        					 		 * Only then, sourceJsonElement can be inserted as a child */
+            					 	SynapseJsonPath targetJsonPath = new SynapseJsonPath("$");            		
+            					 	Object key = synCtx.getProperty("ENRICH_TARGET_CHILD_KEY");   
+            					 	Object newJsonElement = targetJsonPath.appendToObject
+            	            				(jsonObject, ((Map<?,?>)jsonObject), key, sourceJsonElement, false);
+            					 	synCtx.setProperty(property, JSONProviderUtil.objectToString(newJsonElement));
+        					 	} else {
+            					 	synLog.error("Error executing Target-type 'property' with action 'child' : " +
+                         			"Original value of property " + property + " does not hold a valid object " +
+                         			"representation (should be a JSON Array or JSON Object String) " +
+                         			"to take source as a child");
+        					 	}
                 			} else {
                 				synLog.error("Error executing Target-type 'property' with action 'child' : " +
-                            			"Original value of property " + property + "does not hold a valid object " +
-                            			"representation (should be a JSON Array String) to take source as a child");
+                            			"Original value of property " + property + " does not hold a valid object " +
+                            			"representation (should be a JSON Array or JSON Object String) " +
+                            			"to take source as a child");
                 			}
                 		} else {
                 			/* 'else' becomes true, when 'o' is a number or boolean ... */
                 			synLog.error("Error executing Target-type 'property' with action 'child' : " +
-                        			"Original value of property " + property + "does not hold a valid object " +
-                        			"representation (should be a JSON Array String) to take source as a child");
+                        			"Original value of property " + property + " does not hold a valid object " +
+                        			"representation (should be a JSON Array or JSON Object String) " +
+                        			"to take source as a child");
                 		}
                 	} else {
                 		synLog.error("Error executing Target-type 'property' with action 'child' : " +
                 				"Specifed property does not exist");
-                	}          	
+                	}     	
+                	
                 } else if (action.equals(ACTION_ADD_SIBLING)) {
                 	
                 	Object o = synCtx.getProperty(property);
                 	if(o != null){ 
+
+                		if(o instanceof OMElement) {
+                			o = JSONProviderUtil.objectToString(((OMElement)o).toString().trim());
+                		}
                 		ArrayList<Object> newArrayList = new ArrayList<Object>();
-                		/* check if o is a String 
-                		 * if 'yes', convert that to a JSON String element */
-                		/*if(o instanceof String){
-                			if(!((String)o).startsWith("\"") && 
-                					!((String)o).endsWith("\"")){
-                				o = "\"" + (String)o + "\"";
-                			} 
-                		}*/
                 		newArrayList.add(o);
-                		/* check if sourceJsonElement is a String 
-                		 * if 'yes', convert that to a JSON String element */
-                		/*if(sourceJsonElement instanceof String){
-                			if(!((String)sourceJsonElement).startsWith("\"") && 
-                					!((String)sourceJsonElement).endsWith("\"")){
-                				sourceJsonElement = "\"" + (String)sourceJsonElement + "\"";
-                			}      			
-                		}*/
+                		if(sourceJsonElement instanceof Map 
+                				|| sourceJsonElement instanceof List 
+                					|| sourceJsonElement instanceof String){
+                			sourceJsonElement = JSONProviderUtil.objectToString(sourceJsonElement);
+                		}
                 		newArrayList.add(sourceJsonElement);
                 		newArrayList.trimToSize();
                 		synCtx.setProperty(property, newArrayList.toString());
+                		
                 	} else {
                 		synLog.error("Error executing Target-type 'property' with action 'sibling' : " +
                 				"Specifed property does not exist");

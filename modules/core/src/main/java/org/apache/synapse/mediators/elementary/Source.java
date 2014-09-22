@@ -255,7 +255,7 @@ public class Source {
 		 * Why a HashMap? If we return simply the evaluated json element
 		 * (since we allow null as a valid option in a json), when null is
 		 * returned that can be due to a valid reason as well as due to an error
-		 * in specified path. So to distinguish such occasions, a HashMap with
+		 * in specified configuration. So to distinguish such occasions, a HashMap with
 		 * an execution status has been used instead. */
     	
     	HashMap<String, Object> executionStatus = new HashMap<String, Object>();
@@ -268,66 +268,46 @@ public class Source {
     	
     	if (sourceType == EnrichMediator.CUSTOM) {
     		
-            if (xpath == null) {
-            	synLog.error("Error executing Source-type 'custom' : " +
-            			"JSON-Path should not be null when type is CUSTOM");
-            	executionStatus.put("errorsExistInSrcTag", true);
-            } else {
-            	
-            	/*
+            if (xpath != null) {
             	SynapseJsonPath sourceJsonPath = (SynapseJsonPath)this.xpath;
             	Object o = sourceJsonPath.evaluate(synCtx);
-            	boolean sourcePathIsDefinite = sourceJsonPath.isPathDefinite();
-            	if(sourcePathIsDefinite){
-            		// when source-path-is-definite, then the result would be an array of zero-to-one result 
-            		if(((List<?>)o).size() == 0) {
-            			sourceJsonElement = null;
-            		} else {
-            			sourceJsonElement = ((List<?>)o).get(0);
-            		}     		
+            	if(o != null) {
+            		if (o instanceof List) {
+            			if(((List<?>)o).size() == 0) {
+                			sourceJsonElement = null;
+                		}else if(((List<?>)o).size() == 1) {
+                			sourceJsonElement = ((List<?>)o).get(0);
+                		} else {
+                			sourceJsonElement = o;
+                		}
+            		}
             	} else {
-            		// when source-path-is-not-definite, then the result would be an array of zero-to-many results 
-            		sourceJsonElement = o;
-            	}
-            	*/
-            	
-            	SynapseJsonPath sourceJsonPath = (SynapseJsonPath)this.xpath;           	
-            	HashMap<String, Object> result = sourceJsonPath.getJsonElement(synCtx);
-            	
-            	if(result.get("pathIsValid").equals("yes")) {
-            		sourceJsonElement = result.get("evaluatedJsonElement");
-            	} else {            		
             		synLog.error("Error executing Source-type 'custom' : Errors exist in obtaining " +
             				"the specified source json element");
                 	executionStatus.put("errorsExistInSrcTag", true);
             	}
+            } else {
+          	
+            	synLog.error("Error executing Source-type 'custom' : " +
+            			"JSON-Path should not be null when type is CUSTOM");
+            	executionStatus.put("errorsExistInSrcTag", true);
             }
             
         } else if (sourceType == EnrichMediator.BODY) {
-       	
-        	/*
+        	
         	SynapseJsonPath sourceJsonPath = new SynapseJsonPath("$");
         	Object o = sourceJsonPath.evaluate(synCtx);
-        	boolean sourcePathIsDefinite = sourceJsonPath.isPathDefinite();
-        	if(sourcePathIsDefinite){
-        		// when source-path-is-definite, then the result would be an array of zero-to-one result
-        		if(((List<?>)o).size() == 0) {
-        			sourceJsonElement = null;
-        		} else {
-        			sourceJsonElement = ((List<?>)o).get(0);
-        		}     		
+        	if(o != null) {
+        		if (o instanceof List) {
+        			if(((List<?>)o).size() == 0) {
+            			sourceJsonElement = null;
+            		}else if(((List<?>)o).size() == 1) {
+            			sourceJsonElement = ((List<?>)o).get(0);
+            		} else {
+            			sourceJsonElement = o;
+            		}
+        		}
         	} else {
-        		// when source-path-is-not-definite, then the result would be an array of zero-to-many results
-        		sourceJsonElement = o;
-        	}
-        	*/
-        	
-        	SynapseJsonPath sourceJsonPath = new SynapseJsonPath("$");       	
-        	HashMap<String, Object> result = sourceJsonPath.getJsonElement(synCtx);
-        	
-        	if(result.get("errorsExistInReadingStream").equals(false)) {
-        		sourceJsonElement = result.get("evaluatedJsonElement");
-        	} else {            		
         		synLog.error("Error executing Source-type 'body' : Errors exist in obtaining " +
         				"the specified source json element");
             	executionStatus.put("errorsExistInSrcTag", true);
@@ -335,12 +315,9 @@ public class Source {
         	
         } else if (sourceType == EnrichMediator.PROPERTY) {
         	
-        	if(property == null || property.isEmpty()){
-            	synLog.error("Error executing Source-type 'property' : Property name should not be null " +
-            			"or empty when type is PROPERTY");
-            	executionStatus.put("errorsExistInSrcTag", true);
-            }else{
-            	Object o = synCtx.getProperty(property);
+        	if(this.property != null && !this.property.isEmpty()) {
+            	
+        		Object o = synCtx.getProperty(this.property);
             	if(o != null){
             		if(o instanceof OMElement){
             			/**
@@ -358,17 +335,19 @@ public class Source {
             			 * [4] A Number
             			 * [5] A Boolean
             			 */
-            			 if(o instanceof String){
+            			 if(o instanceof String) {
             				 String s = ((String)o).trim();
-            				 /* check if string may contain a json-array or json-object */          				  
-            				 if((s.startsWith("{") && s.endsWith("}")) 
+            				 /* check if string may contain a json-array or json-object */      				  
+            				 if((s.startsWith("{") && s.endsWith("}"))
             						 || (s.startsWith("[") && s.endsWith("]"))) {
             					 /* if yes, try to convert */
-            					 sourceJsonElement = EIPUtils.stringtoJSON(s);
-            					 if(sourceJsonElement == null){
+            					 sourceJsonElement = EIPUtils.getRootJSONObject(s);
+            					 if(sourceJsonElement == null) {
             						 sourceJsonElement = s;
             					 }
-            				 }else{
+            				 } else if (s.startsWith("\"") && s.endsWith("\"")) {
+                 				  sourceJsonElement = s = s.substring(1, s.length()-1);
+                 			 } else {
             					 /**
             					  * use-cases of empty and null strings 
             					  * [1] pointing to non existing array element in an expression, 
@@ -379,21 +358,27 @@ public class Source {
             					  * [5] Pointing to a "null" string, also results in a "null" string
             					  * For the time-being, they will be forwarded to the target as it is...
             					  * */
-            					 sourceJsonElement = s;
-            				 }            				 
-            			 }else if(o instanceof Number || o instanceof Boolean){
+                 				  sourceJsonElement = s;
+            				  }            				 
+            			 } else if (o instanceof Number || o instanceof Boolean) {
             				 sourceJsonElement = o;
-            			 }else{
+            			 } else {
             				 synLog.error("Error executing Source-type 'property' : Invalid source property " +
             				 		"with an unexpected value");
             				 executionStatus.put("errorsExistInSrcTag", true);
             			 }
             		}
-            	}else{
+            	} else {
+            		
             		synLog.error("Error executing Source-type 'property' : Source definition may be poiting " +
             				"to a non-existing property");
             		executionStatus.put("errorsExistInSrcTag", true);
             	}
+            } else {
+            	
+            	synLog.error("Error executing Source-type 'property' : Property name should not be null " +
+            			"or empty when type is PROPERTY");
+            	executionStatus.put("errorsExistInSrcTag", true);           	
             }
 
         } else if (sourceType == EnrichMediator.INLINE) {
@@ -410,41 +395,40 @@ public class Source {
         			/**
         			 * If 'else' condition is true, then the in-line text can contain either:
         			 * [1] A String
-        			 * [2] A Number
-        			 * [3] A Boolean
+        			 * [2] A Number as a String
+        			 * [3] A Boolean as a String
         			 * [4] A JsonObject as a string
         			 * [5] A JsonArray as a string
         			 */
         			String inlineText = ((OMText)this.inlineOMNode).getText().trim();
-        			/* if inlineText contains beginning-and-ending-double-quotes, 
-        			 * it will be considered as a string */
-        			if(inlineText.startsWith("\"") && inlineText.endsWith("\"")) {
-        				sourceJsonElement = inlineText = inlineText.substring(1, inlineText.length()-1);
-        			}else{
-        				/* check if in-line text may contain a json-array or json-object */           			
-            			if((inlineText.startsWith("{") && inlineText.endsWith("}")) 
+        			
+        			if((inlineText.startsWith("{") && inlineText.endsWith("}")) 
             					|| (inlineText.startsWith("[") && inlineText.endsWith("]"))) {	
-            				/* if yes, try to convert */
-            				sourceJsonElement = EIPUtils.stringtoJSON(inlineText);
-            				if(sourceJsonElement == null) {
-            					sourceJsonElement = inlineText;
-            				}
-            			} else {
-                			if(Source.isNumeric(inlineText)) {
-                				sourceJsonElement = new Double(inlineText);
-                			} else if ("true".equals(inlineText.toLowerCase()) 
-                					|| "false".equals(inlineText.toLowerCase())) {
-                				sourceJsonElement = new Boolean(inlineText);
-                			} else if ("null".equals(inlineText.toLowerCase()) || "".equals(inlineText)) {
-                				sourceJsonElement = null;
-                			} else {
-                				sourceJsonElement = inlineText;
-                			}
+        				/* check if in-line text may contain a json-array or json-object */
+            			/* if yes, try to convert */
+            			sourceJsonElement = EIPUtils.getRootJSONObject(inlineText);
+            			if(sourceJsonElement == null) {
+            				sourceJsonElement = inlineText;
             			}
-        			}
+            		} else if(inlineText.startsWith("\"") && inlineText.endsWith("\"")) {
+            			/* if inlineText contains beginning-and-ending-double-quotes, 
+            			 * it will be considered as a string */
+        				sourceJsonElement = inlineText = inlineText.substring(1, inlineText.length()-1);
+        			} else {
+                		if(Source.isNumeric(inlineText)) {
+                			sourceJsonElement = new Double(inlineText);
+                		} else if ("true".equals(inlineText.toLowerCase()) 
+                					|| "false".equals(inlineText.toLowerCase())) {
+                			sourceJsonElement = new Boolean(inlineText);
+                		} else if ("null".equals(inlineText.toLowerCase()) || "".equals(inlineText)) {
+                			sourceJsonElement = null;
+                		} else {
+                			sourceJsonElement = inlineText;
+                		}
+            		}
         		}
         	} else if (this.inlineKey != null && !this.inlineKey.isEmpty()) {
-        		Object inlineKeyObj = synCtx.getEntry(inlineKey);
+        		Object inlineKeyObj = synCtx.getEntry(this.inlineKey);
         		if(inlineKeyObj != null) {
         			if (inlineKeyObj instanceof OMElement) {
             			/**
@@ -457,38 +441,37 @@ public class Source {
             			/**
             			 * If 'else' condition is true, then the in-line text can contain either:
             			 * [1] A String
-            			 * [2] A Number
-            			 * [3] A Boolean
+            			 * [2] A Number as a String
+            			 * [3] A Boolean as a String
             			 * [4] A JsonObject as a string
             			 * [5] A JsonArray as a string
             			 */
             			String inlineText = ((String)inlineKeyObj).trim();
-            			/* if inlineText contains beginning-and-ending-double-quotes, 
-            			 * it will be considered as a string */
-            			if(inlineText.startsWith("\"") && inlineText.endsWith("\"")) {
-            				sourceJsonElement = inlineText = inlineText.substring(1, inlineText.length()-1);
-            			}else{
-            				/* check if in-line text may contain a json-array or json-object */           			
-                			if((inlineText.startsWith("{") && inlineText.endsWith("}")) 
+            				
+            			/* check if in-line text may contain a json-array or json-object */           			
+                		if((inlineText.startsWith("{") && inlineText.endsWith("}")) 
                 					|| (inlineText.startsWith("[") && inlineText.endsWith("]"))) {	
-                				/* if yes, try to convert */
-                				sourceJsonElement = EIPUtils.stringtoJSON(inlineText);
-                				if(sourceJsonElement == null) {
-                					sourceJsonElement = inlineText;
-                				}
-                			}else{
-                    			if(Source.isNumeric(inlineText)) {
-                    				sourceJsonElement = new Double(inlineText);
-                    			} else if ("true".equals(inlineText.toLowerCase()) 
-                    					|| "false".equals(inlineText.toLowerCase())){
-                    				sourceJsonElement = new Boolean(inlineText);
-                    			} else if ("null".equals(inlineText.toLowerCase()) || "".equals(inlineText)) {
-                    				sourceJsonElement = null;
-                    			} else {
-                    				sourceJsonElement = inlineText;
-                    			}
+                			/* if yes, try to convert */
+                			sourceJsonElement = EIPUtils.getRootJSONObject(inlineText);
+                			if(sourceJsonElement == null) {
+                				sourceJsonElement = inlineText;
                 			}
-            			}
+                		} else if (inlineText.startsWith("\"") && inlineText.endsWith("\"")) {
+                			/* if inlineText contains beginning-and-ending-double-quotes, 
+                			 * it will be considered as a string */
+            				sourceJsonElement = inlineText = inlineText.substring(1, inlineText.length()-1);
+            			} else {
+                    		if(Source.isNumeric(inlineText)) {
+                    			sourceJsonElement = new Double(inlineText);
+                    		} else if ("true".equals(inlineText.toLowerCase()) 
+                    				|| "false".equals(inlineText.toLowerCase())){
+                    			sourceJsonElement = new Boolean(inlineText);
+                    		} else if ("null".equals(inlineText.toLowerCase()) || "".equals(inlineText)) {
+                    			sourceJsonElement = null;
+                    		} else {
+                    			sourceJsonElement = inlineText;
+                    		}
+                		}
             		}
         		}else{
         			sourceJsonElement = null;
