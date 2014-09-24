@@ -354,6 +354,7 @@ public class Source {
             					  * [2] pointing to a null, results in a "null" string
             					  * [3] Pointing to a "null" string, results in a "\"null\"" string
             					  * */
+                 				 
                  				  if(("\"null\"").equals(s)) {
                  					 sourceJsonElement = "null";
                  				  } else if (("null").equals(s)) {
