@@ -346,19 +346,22 @@ public class Source {
             						 sourceJsonElement = s;
             					 }
             				 } else if (s.startsWith("\"") && s.endsWith("\"")) {
-                 				  sourceJsonElement = s = s.substring(1, s.length()-1);
+                 				  sourceJsonElement = s.substring(1, s.length()-1);
                  			 } else {
-            					 /**
+                 				/**
             					  * use-cases of empty and null strings 
-            					  * [1] pointing to non existing array element in an expression, 
-            					  *     results in empty string ""
-            					  * [2] However, Pointing to an empty string also results in an empty string 
-            					  * [3] pointing to a null, results in a "null" string
-            					  * [4] giving a wrong json-path in an expression, also results in a "null" string
-            					  * [5] Pointing to a "null" string, also results in a "null" string
-            					  * For the time-being, they will be forwarded to the target as it is...
+            					  * [1] Pointing to an empty string results in a "\"\"" string
+            					  * [2] pointing to a null, results in a "null" string
+            					  * [3] Pointing to a "null" string, results in a "\"null\"" string
             					  * */
-                 				  sourceJsonElement = s;
+                 				 
+                 				  if(("\"null\"").equals(s)) {
+                 					 sourceJsonElement = "null";
+                 				  } else if (("null").equals(s)) {
+                 					 sourceJsonElement = null;
+                 				  } else {
+                 					 sourceJsonElement = s;
+                 				  }            				  
             				  }            				 
             			 } else if (o instanceof Number || o instanceof Boolean) {
             				 sourceJsonElement = o;
