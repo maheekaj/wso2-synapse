@@ -160,26 +160,26 @@ public class EIPUtils {
         }
     }
     
-    public static void enrichJSONSStream(Object rootJsonObject, MessageContext enricherContext, SynapseJsonPath expression) throws JaxenException{
-    	Object newItemsObj=expression.evaluate(enricherContext);
-    	if(newItemsObj!=null && newItemsObj instanceof List && !((List)newItemsObj).isEmpty()){
-    		// find root element
-    		//Object root = getRootJSONObject(messageContext);
-			if (rootJsonObject != null){
-    			// find existing 0th item from the stream
-        		//Object parent = expression.findParent(root);
-        		// Iterate through new elements and add to parent element
-        		
-        		//if(parent!=null){
-                	for(Object item:(List)newItemsObj){
-                		rootJsonObject = expression.appendToParent(rootJsonObject, item);
-                	}
-                	// write the new JSON message to the stream
-                	//JsonUtil.newJsonPayload(((Axis2MessageContext) messageContext).getAxis2MessageContext(), JSONProviderUtil.objectToString(root), true, true);
-               	//}
+    /**
+     * This method will extract all the matching message parts from enricherContext and concatenate into rootJsonObject.
+     * @param rootJsonObject Root JSON Object
+     * @param enricherContext new message context
+     * @param expression expression to extract message parts
+     * @return Updated Root JSON Object
+     * @throws JaxenException
+     */
+	public static Object enrichJSONSStream(Object rootJsonObject, MessageContext enricherContext,
+	                                       SynapseJsonPath expression) throws JaxenException {
+		Object newItemsObj = expression.evaluate(enricherContext);
+		if (newItemsObj != null && newItemsObj instanceof List && !((List) newItemsObj).isEmpty()) {
+			if (rootJsonObject != null) {
+				for (Object item : (List) newItemsObj) {
+					rootJsonObject = expression.appendToParent(rootJsonObject, item);
+				}
 			}
-    	}
-    }
+		}
+		return rootJsonObject;
+	}
     
     public static Object getRootJSONObject(MessageContext messageContext) throws JaxenException{
     	return getRootJSON(messageContext);
