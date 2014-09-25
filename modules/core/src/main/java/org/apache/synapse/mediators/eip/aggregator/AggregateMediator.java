@@ -477,7 +477,7 @@ public class AggregateMediator extends AbstractMediator implements ManagedLifecy
                     }else if(aggregationExpression instanceof SynapseJsonPath){
                     	if(jsonPayload == null)
                     		jsonPayload=EIPUtils.getRootJSONObject(newCtx);
-                    	EIPUtils.enrichJSONSStream(jsonPayload, synCtx, (SynapseJsonPath)aggregationExpression);
+                    	jsonPayload = EIPUtils.enrichJSONSStream(jsonPayload, synCtx, (SynapseJsonPath)aggregationExpression);
                     }
                     
                     if (log.isDebugEnabled()) {
