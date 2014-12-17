@@ -230,8 +230,10 @@ public class Target {
         		
         		if(targetPathIsDefinite) {
         			/* See if path is valid to be considered 
-        			 * If not valid, following line will result in an exception and stop proceeding further */
-        			targetJsonPath.exitIfAnErrorExistsInFindingPath(synCtx); 
+        			 * If not valid, following line will result in an exception and stop proceeding further 
+        			 * This has been added since find() method used by replace(), append() & appendToParent(), 
+        			 * does not simply support throwing exceptions for invalid paths */
+        			targetJsonPath.exitIfAnErrorExistsInFindingPath(synCtx);
         			/* only if target-path-is-definite and target-path-is-valid, 
         			 * a new element will be considered to be attached */
         			Object currentJsonPayload = null, newJsonPayload = null;
@@ -258,8 +260,6 @@ public class Target {
             			
                     } else if (action.equals(ACTION_ADD_CHILD)) {
                     
-                    	/*HashMap<String, Object> result = targetJsonPath.getJsonElement(synCtx);
-                    	Object targetJsonElement = result.get("evaluatedJsonElement");*/
                     	Object targetJsonElement = targetJsonPath.find(currentJsonPayload);
                     	
                     	if(targetJsonElement instanceof List) {
@@ -269,7 +269,7 @@ public class Target {
                             		                JSONProviderUtil.objectToString(newJsonPayload), true, true);
                     	} else if(targetJsonElement instanceof Map) {
                     		
-                    		Object key = synCtx.getProperty("ENRICH_TARGET_CHILD_KEY");      		
+                    		Object key = synCtx.getProperty("ENRICH_TARGET_CHILD_KEY");    		
                     		newJsonPayload = targetJsonPath.appendToObject
                     				(currentJsonPayload, ((Map<?,?>)targetJsonElement), key, sourceJsonElement, false);
                     		/* creating the new message payload with enriched json element */
@@ -343,20 +343,9 @@ public class Target {
             	
             	Object currentJsonPayload = null, newJsonPayload = null;
             	currentJsonPayload = EIPUtils.getRootJSONObject((Axis2MessageContext)synCtx);
-        		
-        		ArrayList<Object> newArrayList = new ArrayList<Object>();
-        		newArrayList.add(currentJsonPayload);
-        		/* check if sourceJsonElement is a String 
-        		 * if 'yes', convert that to a JSON String element */
-        		/*if(sourceJsonElement instanceof String){
-        			if(!((String)sourceJsonElement).startsWith("\"") && 
-        					!((String)sourceJsonElement).endsWith("\"")){
-        				sourceJsonElement = "\"" + (String)sourceJsonElement + "\"";
-        			}      			
-        		}*/
-        		newArrayList.add(sourceJsonElement);        		
-        		newArrayList.trimToSize();       		
-        		newJsonPayload = newArrayList;
+            	
+            	SynapseJsonPath targetJsonPath = new SynapseJsonPath("$");           	
+            	newJsonPayload = targetJsonPath.appendToParent(currentJsonPayload, sourceJsonElement, true);
 
         		/* creating the new message payload with enriched json element */
             	JsonUtil.newJsonPayload(((Axis2MessageContext)synCtx).getAxis2MessageContext(),
@@ -377,7 +366,7 @@ public class Target {
             			synCtx.setProperty(property, "null");
             		}
                 } else if (action.equals(ACTION_ADD_CHILD)) {
-
+                	/* A property can have OM/String/Number/Boolean type values */
                 	Object o = synCtx.getProperty(property);
                 	if(o != null){
                 		if(o instanceof String){
@@ -434,10 +423,11 @@ public class Target {
                 	}     	
                 	
                 } else if (action.equals(ACTION_ADD_SIBLING)) {
-                	
+                	/* A property can have OM/String/Number/Boolean type values */
                 	Object o = synCtx.getProperty(property);
                 	if(o != null){ 
-
+						/* Ultimate goal here is to create a JSON Like Array and
+						 * store it in the property as a String */
                 		if(o instanceof OMElement) {
                 			o = JSONProviderUtil.objectToString(((OMElement)o).toString().trim());
                 		}

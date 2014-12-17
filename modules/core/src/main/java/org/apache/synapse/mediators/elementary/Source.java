@@ -28,16 +28,12 @@ import org.apache.axiom.soap.SOAPHeaderBlock;
 import org.apache.axiom.soap.impl.builder.StAXSOAPModelBuilder;
 import org.apache.synapse.MessageContext;
 import org.apache.synapse.SynapseLog;
-import org.apache.synapse.commons.json.JSONProviderUtil;
-import org.apache.synapse.commons.json.JsonUtil;
 import org.apache.synapse.config.xml.SynapsePath;
-import org.apache.synapse.core.axis2.Axis2MessageContext;
 import org.apache.synapse.mediators.eip.EIPUtils;
 import org.apache.synapse.util.MessageHelper;
 import org.apache.synapse.util.xpath.SynapseJsonPath;
 import org.jaxen.JaxenException;
 
-import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -316,7 +312,7 @@ public class Source {
         } else if (sourceType == EnrichMediator.PROPERTY) {
         	
         	if(this.property != null && !this.property.isEmpty()) {
-            	
+        		/** A property can have OM/String/Number/Boolean type values */
         		Object o = synCtx.getProperty(this.property);
             	if(o != null){
             		if(o instanceof OMElement){
@@ -337,10 +333,10 @@ public class Source {
             			 */
             			 if(o instanceof String) {
             				 String s = ((String)o).trim();
-            				 /* check if string may contain a json-array or json-object */      				  
+            				 /** check if string may contain a json-array or json-object */      				  
             				 if((s.startsWith("{") && s.endsWith("}"))
             						 || (s.startsWith("[") && s.endsWith("]"))) {
-            					 /* if yes, try to convert */
+            					 /** if yes, try to convert */
             					 sourceJsonElement = EIPUtils.getRootJSONObject(s);
             					 if(sourceJsonElement == null) {
             						 sourceJsonElement = s;
