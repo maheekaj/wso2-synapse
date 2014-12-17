@@ -52,6 +52,7 @@ public class SynapseJsonPath extends SynapsePath {
     getProperty(SynapseConstants.STREAMING_JSONPATH_PROCESSING);
 
     private JsonPath jsonPath;
+    PathTokenizer pathTokenizer;
     private static Configuration configuration;
     
     static{
@@ -71,6 +72,7 @@ public class SynapseJsonPath extends SynapsePath {
         this.contentAware = true;
         this.expression = jsonPathExpression;
         jsonPath = JsonPath.compile(jsonPathExpression);
+        pathTokenizer = new PathTokenizer(jsonPath.getPath());
         // Check if the JSON path expression evaluates to the whole payload. If so no point in evaluating the path.
         if ("$".equals(jsonPath.getPath().trim()) || "$.".equals(jsonPath.getPath().trim())) {
             isWholeBody = true;
@@ -167,11 +169,11 @@ public class SynapseJsonPath extends SynapsePath {
 			if(object instanceof MessageContext) {
 				MessageContext synCtx = (MessageContext) object;
     			result = listValueOf(synCtx);
-    		}else if(object instanceof String)
+    		}else if(object instanceof String){
     			result = listValueOf(IOUtils.toInputStream(object.toString()));
-    		/*if (result == null)
-    			result = new ArrayList();*/
+    		}
 		}
+		// return Collections.EMPTY_LIST;
 		return result;
 	}
     
@@ -272,13 +274,11 @@ public class SynapseJsonPath extends SynapsePath {
 	private Object findParent(Object rootObject) {
 		Object parent = null;
 		if (!isWholeBody) {
-			PathTokenizer tokenizer = new PathTokenizer(jsonPath.getPath());
-			tokenizer.removeLastPathToken();
 			StringBuilder sb = new StringBuilder();
-			List<String> fragments = tokenizer.getFragments();
-			for (int i = 0; i < fragments.size(); i++) {
+			List<String> fragments = pathTokenizer.getFragments();
+			for (int i = 0; i < fragments.size() - 1 ; i++) {
 				sb.append(fragments.get(i));
-				if (i < fragments.size() - 1)
+				if (i < fragments.size() - 2)
 					sb.append(".");
 			}
 			if (!"".equals(sb.toString())) {
@@ -365,18 +365,19 @@ public class SynapseJsonPath extends SynapsePath {
 	 * @return Updated Root Object
 	 */
 	public Object append(Object rootObject, Object parent, Object child, boolean isSibling) {
-		if (parent != null && parent instanceof List) {
+		if (parent instanceof List) {
 			((List) parent).add(child);
-		} else if (parent != null && parent instanceof Map) {
-			/* should we add following line */
-			parent = findParent(rootObject);
+		} else if (parent instanceof Map) {
 			Object currentChild = jsonPath.find(rootObject);
-			if (parent != null/* && currentChild != null*/) {
+			if (parent != null) {
 				String skey = getLastToken();
 				Map obj = (Map) parent;
 				if (obj.containsKey(skey)) {
 					Object val = obj.get(skey);
-					if ((currentChild == null && val == currentChild) || currentChild.equals(val)) {
+					/*
+					 * To verify whether the result of the expression is same as the value we extracted from parent. there can be several objects with same key.
+					 */
+					if (currentChild == val) {
 						rootObject = appendToObject(rootObject, obj, skey, child, isSibling);
 						return rootObject;
 					}
@@ -440,14 +441,14 @@ public class SynapseJsonPath extends SynapsePath {
 	 * @return Updated Root Object
 	 */
 	public Object remove(Object rootObject, Object parent, Object child) {
-		if (parent != null && parent instanceof List) {
+		if (parent instanceof List) {
 			((List) parent).remove(child);
-		} else if (parent != null && parent instanceof Map) {
+		} else if (parent instanceof Map) {
 			String skey = getLastToken();
 			Map parentMap = (Map) parent;
 			if (parentMap.containsKey(skey)) {
 				Object val = parentMap.get(skey);
-				if ((child == null && val == child) || child.equals(val)) {
+				if (child == val) {
 					parentMap.remove(skey);
 					return rootObject;
 				}
@@ -472,15 +473,15 @@ public class SynapseJsonPath extends SynapsePath {
 		}else{
     		Object child = jsonPath.find(rootObject);
     		Object parent = findParent(rootObject);
-    		if (parent != null && parent instanceof List) {
+    		if (parent instanceof List) {
     			((List) parent).remove(child);
     			((List) parent).add(newChild);
-    		} else if (parent != null && parent instanceof Map) {
+    		} else if (parent instanceof Map) {
     			String skey = getLastToken();
     			Map parentMap = (Map) parent;
     			if (parentMap.containsKey(skey)) {
     				Object val = parentMap.get(skey);
-    				if ((child == null && val == child) || child.equals(val)) {
+    				if (child == val) {
     					parentMap.put(skey, newChild);
     					return rootObject;
     				}
@@ -498,8 +499,9 @@ public class SynapseJsonPath extends SynapsePath {
 	 * @return last token of the jsonPath.
 	 */
 	private String getLastToken() {
-		PathTokenizer tokenizer = new PathTokenizer(jsonPath.getPath());
-		return tokenizer.getFragments().get(tokenizer.getFragments().size() - 1);
+		/*PathTokenizer tokenizer = new PathTokenizer(jsonPath.getPath());
+		return tokenizer.getFragments().get(tokenizer.getFragments().size() - 1);*/
+		return pathTokenizer.getFragments().get(pathTokenizer.getFragments().size() - 1);
 	}
 	
 	/**
