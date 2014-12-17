@@ -171,7 +171,7 @@ public class EIPUtils {
 	public static Object enrichJSONSStream(Object rootJsonObject, MessageContext enricherContext,
 	                                       SynapseJsonPath expression) throws JaxenException {
 		Object newItemsObj = expression.evaluate(enricherContext);
-		if (newItemsObj != null && newItemsObj instanceof List && !((List) newItemsObj).isEmpty()) {
+		if (newItemsObj instanceof List && !((List) newItemsObj).isEmpty()) {
 			if (rootJsonObject != null) {
 				for (Object item : (List) newItemsObj) {
 					rootJsonObject = expression.appendToParent(rootJsonObject, item);
@@ -192,7 +192,7 @@ public class EIPUtils {
     private static Object getRootJSON(Object object) throws JaxenException{
     	Object root=null;
     	Object objectList=rootJsonPath.evaluate(object);
-    	if (objectList != null && objectList instanceof List) {
+    	if (objectList instanceof List) {
 			List list = (List) objectList;
 			if (list != null && !list.isEmpty()){
 				root = list.get(0);
