@@ -41,17 +41,17 @@ public class JSONProviderUtil {
      * object.
      *
      * @param object input object to convert as JSON String
-     * @return JSON String of the given object
+     * @return JSON String of the given object or null
      */
-    public static String objectToString(Object object) throws AxisFault {
+    public static String objectToString(Object object){
         String json = null;
         try {
             json = objectWriter.writeValueAsString(object);
         } catch (Exception e) {
             if (logger.isDebugEnabled()) {
-                logger.debug(e.getMessage());
+                logger.debug("Error while converting object to JSON String", e);
             }
-            throw new AxisFault("Could not parse the object as a string", e);
+            // null should be returned if the object cannot be passed as a JSON. Since ignore exceptions
         }
         return json;
     }
