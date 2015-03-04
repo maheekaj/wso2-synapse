@@ -26,7 +26,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import org.apache.axis2.AxisFault;
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -81,7 +80,7 @@ public class SynapseJsonPath extends SynapsePath {
         this.setPathType(SynapsePath.JSON_PATH);
     }
 
-    public String stringValueOf(final String jsonString) throws AxisFault{
+    public String stringValueOf(final String jsonString) {
         if (jsonString == null) {
             return "";
         }
