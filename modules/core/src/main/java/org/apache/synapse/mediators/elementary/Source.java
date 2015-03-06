@@ -38,7 +38,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 
-
 /**
  * The source of the XML node to be stored. The source can be a
  * 1. Property
@@ -59,8 +58,8 @@ import java.util.List;
  */
 
 public class Source {
-    //private SynapseXPath xpath = null;
-	private SynapsePath xpath = null;
+
+    private SynapsePath xpath = null;
 	
     private String property = null;
 
