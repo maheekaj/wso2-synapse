@@ -72,7 +72,7 @@ public class Source {
     private String inlineKey = null;
     
 
-	public ArrayList<OMNode> evaluate(MessageContext synCtx, SynapseLog synLog) throws JaxenException {
+    public ArrayList<OMNode> evaluate(MessageContext synCtx, SynapseLog synLog) throws JaxenException {
 
         ArrayList<OMNode> sourceNodeList = new ArrayList<OMNode>();
 
@@ -235,42 +235,42 @@ public class Source {
     }
     
     /**
-     * This method will evaluate a specified source json element
+     * This method will evaluate a specified source json element.
+     * 
      * @param synCtx - Current Message Context
      * @param synLog - Default Logger for the package
-     * @return
-     * A HashMap with the following keys:<br/>
-     * [1] "errorsExistInSrcTag" - holds either true or false<br/>
+     * @return A HashMap with the following keys: <br/>
+     * [1] "errorsExistInSrcTag" - holds either true or false <br/>
      * [2] "evaluatedSrcJsonElement" - holds the evaluated Json Element as an Object
-     * @throws JaxenException */
-    
+     * @throws JaxenException 
+     */
     public HashMap<String, Object> evaluateJson(MessageContext synCtx, SynapseLog synLog) throws JaxenException {
-    		
-		/**
-		 * Why a HashMap? If we return simply the evaluated json element
-		 * (since we allow null as a valid option in a json), when null is
-		 * returned that can be due to a valid reason as well as due to an error
-		 * in specified configuration. So to distinguish such occasions, a HashMap with
-		 * an execution status has been used instead. */
     	
+	/* 
+	 * Why a HashMap? If we return simply the evaluated json element
+	 * (since we allow null as a valid option in a json), when null is
+	 * returned that can be due to a valid reason as well as due to an error
+	 * in specified configuration. So to distinguish such occasions, a HashMap with
+	 * an execution status has been used instead. 
+	 */
     	HashMap<String, Object> executionStatus = new HashMap<String, Object>();
     	executionStatus.put("errorsExistInSrcTag", false);
     	executionStatus.put("evaluatedSrcJsonElement", null);
     	
-    	/* executionStatus with key 'evaluatedSrcJsonElement' 
-    	 * will be finally updated with this to be returned */ 
+    	/* 
+    	 * executionStatus with key 'evaluatedSrcJsonElement' 
+    	 * will be finally updated with this to be returned. 
+    	 */ 
     	Object sourceJsonElement = null;
-    	
     	if (sourceType == EnrichMediator.CUSTOM) {
-    		
             if (xpath != null) {
             	SynapseJsonPath sourceJsonPath = (SynapseJsonPath)this.xpath;
             	Object o = sourceJsonPath.evaluate(synCtx);
             	if(o != null) {
             		if (o instanceof List) {
-            			if(((List<?>)o).size() == 0) {
+            			if (((List<?>)o).size() == 0) {
                 			sourceJsonElement = null;
-                		}else if(((List<?>)o).size() == 1) {
+                		} else if (((List<?>)o).size() == 1) {
                 			sourceJsonElement = ((List<?>)o).get(0);
                 		} else {
                 			sourceJsonElement = o;
@@ -282,47 +282,42 @@ public class Source {
                 	executionStatus.put("errorsExistInSrcTag", true);
             	}
             } else {
-          	
             	synLog.error("Error executing Source-type 'custom' : " +
             			"JSON-Path should not be null when type is CUSTOM");
             	executionStatus.put("errorsExistInSrcTag", true);
             }
-            
         } else if (sourceType == EnrichMediator.BODY) {
-        	
         	SynapseJsonPath sourceJsonPath = new SynapseJsonPath("$");
         	Object o = sourceJsonPath.evaluate(synCtx);
         	if(o != null) {
         		if (o instanceof List) {
-        			if(((List<?>)o).size() == 0) {
-            			sourceJsonElement = null;
-            		}else if(((List<?>)o).size() == 1) {
-            			sourceJsonElement = ((List<?>)o).get(0);
-            		} else {
-            			sourceJsonElement = o;
-            		}
+        			if (((List<?>)o).size() == 0) {
+            				sourceJsonElement = null;
+            			} else if(((List<?>)o).size() == 1) {
+            				sourceJsonElement = ((List<?>)o).get(0);
+            			} else {
+            				sourceJsonElement = o;
+            			}
         		}
         	} else {
         		synLog.error("Error executing Source-type 'body' : Errors exist in obtaining " +
         				"the specified source json element");
-            	executionStatus.put("errorsExistInSrcTag", true);
+            		executionStatus.put("errorsExistInSrcTag", true);
         	}
-        	
         } else if (sourceType == EnrichMediator.PROPERTY) {
-        	
-        	if(this.property != null && !this.property.isEmpty()) {
+        	if (this.property != null && !this.property.isEmpty()) {
         		/** A property can have OM/String/Number/Boolean type values */
         		Object o = synCtx.getProperty(this.property);
-            	if(o != null){
-            		if(o instanceof OMElement){
-            			/**
+            	if (o != null) {
+            		if (o instanceof OMElement) {
+            			/*
             			 * If target type is custom, this will be attached as a string
             			 * If target type is body-replace, this will be considered as an invalid source content
             			 * If target type is property, this will be attached as a string
             			 */
             			sourceJsonElement = ((OMElement)o).toString().trim();
-            		}else{
-            			/**
+            		} else {
+            			/*
             			 * If 'else' condition is true, then the property can contain either:
             			 * [1] A String
             			 * [2] A JsonObject as a string
@@ -330,10 +325,10 @@ public class Source {
             			 * [4] A Number
             			 * [5] A Boolean
             			 */
-            			 if(o instanceof String) {
+            			if (o instanceof String) {
             				 String s = ((String)o).trim();
             				 /** check if string may contain a json-array or json-object */      				  
-            				 if((s.startsWith("{") && s.endsWith("}"))
+            				 if ((s.startsWith("{") && s.endsWith("}"))
             						 || (s.startsWith("[") && s.endsWith("]"))) {
             					 /** if yes, try to convert */
             					 sourceJsonElement = EIPUtils.getRootJSONObject(s);
