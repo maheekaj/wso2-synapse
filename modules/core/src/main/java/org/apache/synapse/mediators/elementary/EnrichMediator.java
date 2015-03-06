@@ -150,11 +150,10 @@ public class EnrichMediator extends AbstractMediator {
         }
         
         // conditions where native-json-processing is supported
-        boolean cndt1IsTrue = false, cndt2IsTrue = false, cndt3IsTrue = false, cndt4IsTrue = false;
-        cndt1IsTrue = (currentMsgPayloadIsJson && !enrichHasCustom);
-        cndt2IsTrue = (currentMsgPayloadIsJson && sourceHasACustomJsonPath && !targetHasCustom);
-        cndt3IsTrue = (currentMsgPayloadIsJson && !sourceHasCustom && targetHasACustomJsonPath);
-        cndt4IsTrue = (currentMsgPayloadIsJson && sourceHasACustomJsonPath && targetHasACustomJsonPath);
+        boolean cndt1IsTrue = (currentMsgPayloadIsJson && !enrichHasCustom);
+        boolean cndt2IsTrue = (currentMsgPayloadIsJson && sourceHasACustomJsonPath && !targetHasCustom);
+        boolean cndt3IsTrue = (currentMsgPayloadIsJson && !sourceHasCustom && targetHasACustomJsonPath);
+        boolean cndt4IsTrue = (currentMsgPayloadIsJson && sourceHasACustomJsonPath && targetHasACustomJsonPath);
         
     	return (cndt1IsTrue || cndt2IsTrue || cndt3IsTrue || cndt4IsTrue);
     }
