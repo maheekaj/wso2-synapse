@@ -327,25 +327,24 @@ public class Source {
             			 */
             			if (o instanceof String) {
             				 String s = ((String)o).trim();
-            				 /** check if string may contain a json-array or json-object */      				  
+            				 // check if string may contain a json-array or json-object  				  
             				 if ((s.startsWith("{") && s.endsWith("}"))
             						 || (s.startsWith("[") && s.endsWith("]"))) {
-            					 /** if yes, try to convert */
+            					 // if yes, try to convert
             					 sourceJsonElement = EIPUtils.getRootJSONObject(s);
-            					 if(sourceJsonElement == null) {
+            					 if (sourceJsonElement == null) {
             						 sourceJsonElement = s;
             					 }
             				 } else if (s.startsWith("\"") && s.endsWith("\"")) {
                  				  sourceJsonElement = s.substring(1, s.length()-1);
                  			 } else {
-                 				/**
-            					  * use-cases of empty and null strings 
-            					  * [1] Pointing to an empty string results in a "\"\"" string
-            					  * [2] pointing to a null, results in a "null" string
-            					  * [3] Pointing to a "null" string, results in a "\"null\"" string
-            					  * */
-                 				 
-                 				  if(("\"null\"").equals(s)) {
+                 				  /*
+            					   * use-cases of empty and null strings 
+            					   * [1] Pointing to an empty string results in a "\"\"" string
+            					   * [2] pointing to a null, results in a "null" string
+            					   * [3] Pointing to a "null" string, results in a "\"null\"" string
+            					   */
+                 				  if (("\"null\"").equals(s)) {
                  					 sourceJsonElement = "null";
                  				  } else if (("null").equals(s)) {
                  					 sourceJsonElement = null;
@@ -357,35 +356,31 @@ public class Source {
             				 sourceJsonElement = o;
             			 } else {
             				 synLog.error("Error executing Source-type 'property' : Invalid source property " +
-            				 		"with an unexpected value");
+            				 		  "with an unexpected value");
             				 executionStatus.put("errorsExistInSrcTag", true);
             			 }
             		}
             	} else {
-            		
             		synLog.error("Error executing Source-type 'property' : Source definition may be poiting " +
             				"to a non-existing property");
             		executionStatus.put("errorsExistInSrcTag", true);
             	}
             } else {
-            	
             	synLog.error("Error executing Source-type 'property' : Property name should not be null " +
             			"or empty when type is PROPERTY");
             	executionStatus.put("errorsExistInSrcTag", true);           	
             }
-
         } else if (sourceType == EnrichMediator.INLINE) {
-        	
-        	if(this.inlineOMNode != null){
+        	if (this.inlineOMNode != null) {
         		if (this.inlineOMNode instanceof OMElement) {
-        			/**
+        			/*
         			 * If target type is custom, this will be attached as a string
         			 * If target type is body-replace, this will be considered as an invalid source content
         			 * If target type is property, this will be attached as a string
         			 */
         			sourceJsonElement = ((OMElement)this.inlineOMNode).toString().trim();
         		} else {
-        			/**
+        			/*
         			 * If 'else' condition is true, then the in-line text can contain either:
         			 * [1] A String
         			 * [2] A Number as a String
@@ -395,101 +390,101 @@ public class Source {
         			 */
         			String inlineText = ((OMText)this.inlineOMNode).getText().trim();
         			
-        			if((inlineText.startsWith("{") && inlineText.endsWith("}")) 
-            					|| (inlineText.startsWith("[") && inlineText.endsWith("]"))) {	
-        				/* check if in-line text may contain a json-array or json-object */
-            			/* if yes, try to convert */
-            			sourceJsonElement = EIPUtils.getRootJSONObject(inlineText);
-            			if(sourceJsonElement == null) {
-            				sourceJsonElement = inlineText;
-            			}
-            		} else if(inlineText.startsWith("\"") && inlineText.endsWith("\"")) {
-            			/* if inlineText contains beginning-and-ending-double-quotes, 
-            			 * it will be considered as a string */
-        				sourceJsonElement = inlineText = inlineText.substring(1, inlineText.length()-1);
-        			} else {
-                		if(Source.isNumeric(inlineText)) {
-                			sourceJsonElement = new Double(inlineText);
-                		} else if ("true".equals(inlineText.toLowerCase()) 
-                					|| "false".equals(inlineText.toLowerCase())) {
-                			sourceJsonElement = new Boolean(inlineText);
-                		} else if ("null".equals(inlineText.toLowerCase()) || "".equals(inlineText)) {
-                			sourceJsonElement = null;
-                		} else {
-                			sourceJsonElement = inlineText;
-                		}
-            		}
+        			if ((inlineText.startsWith("{") && inlineText.endsWith("}")) || 
+        					(inlineText.startsWith("[") && inlineText.endsWith("]"))) {	
+        				// check if in-line text may contain a json-array or json-object
+            			 	// if yes, try to convert
+            				sourceJsonElement = EIPUtils.getRootJSONObject(inlineText);
+            				if(sourceJsonElement == null) {
+            					sourceJsonElement = inlineText;
+            				}
+	            		} else if (inlineText.startsWith("\"") && inlineText.endsWith("\"")) {
+	            			// if inlineText contains beginning-and-ending-double-quotes, 
+	            			// it will be considered as a string
+	        			sourceJsonElement = inlineText = inlineText.substring(1, inlineText.length()-1);
+	        		} else {
+	                		if(Source.isNumeric(inlineText)) {
+	                			sourceJsonElement = new Double(inlineText);
+	                		} else if ("true".equals(inlineText.toLowerCase()) || 
+	                				"false".equals(inlineText.toLowerCase())) {
+	                			sourceJsonElement = new Boolean(inlineText);
+	                		} else if ("null".equals(inlineText.toLowerCase()) || 
+	                				"".equals(inlineText)) {
+	                			sourceJsonElement = null;
+	                		} else {
+	                			sourceJsonElement = inlineText;
+	                		}
+	            		}
         		}
         	} else if (this.inlineKey != null && !this.inlineKey.isEmpty()) {
         		Object inlineKeyObj = synCtx.getEntry(this.inlineKey);
-        		if(inlineKeyObj != null) {
+        		if (inlineKeyObj != null) {
         			if (inlineKeyObj instanceof OMElement) {
-            			/**
-            			 * If target type is custom, this will be attached as a string
-            			 * If target type is body-replace, this will be considered as an invalid source content
-            			 * If target type is property, this will be attached as a string
-            			 */
-            			sourceJsonElement = ((OMElement)inlineKeyObj).toString().trim();
-            		} else {
-            			/**
-            			 * If 'else' condition is true, then the in-line text can contain either:
-            			 * [1] A String
-            			 * [2] A Number as a String
-            			 * [3] A Boolean as a String
-            			 * [4] A JsonObject as a string
-            			 * [5] A JsonArray as a string
-            			 */
-            			String inlineText = ((String)inlineKeyObj).trim();
-            				
-            			/* check if in-line text may contain a json-array or json-object */           			
-                		if((inlineText.startsWith("{") && inlineText.endsWith("}")) 
-                					|| (inlineText.startsWith("[") && inlineText.endsWith("]"))) {	
-                			/* if yes, try to convert */
-                			sourceJsonElement = EIPUtils.getRootJSONObject(inlineText);
-                			if(sourceJsonElement == null) {
-                				sourceJsonElement = inlineText;
-                			}
-                		} else if (inlineText.startsWith("\"") && inlineText.endsWith("\"")) {
-                			/* if inlineText contains beginning-and-ending-double-quotes, 
-                			 * it will be considered as a string */
-            				sourceJsonElement = inlineText = inlineText.substring(1, inlineText.length()-1);
-            			} else {
-                    		if(Source.isNumeric(inlineText)) {
-                    			sourceJsonElement = new Double(inlineText);
-                    		} else if ("true".equals(inlineText.toLowerCase()) 
-                    				|| "false".equals(inlineText.toLowerCase())){
-                    			sourceJsonElement = new Boolean(inlineText);
-                    		} else if ("null".equals(inlineText.toLowerCase()) || "".equals(inlineText)) {
-                    			sourceJsonElement = null;
-                    		} else {
-                    			sourceJsonElement = inlineText;
-                    		}
-                		}
-            		}
-        		}else{
+	            			/*
+	            			 * If target type is custom, this will be attached as a string
+	            			 * If target type is body-replace, this will be considered as an invalid source content
+	            			 * If target type is property, this will be attached as a string
+	            			 */
+	            			sourceJsonElement = ((OMElement)inlineKeyObj).toString().trim();
+	            		} else {
+	            			/*
+	            			 * If 'else' condition is true, then the in-line text can contain either:
+	            			 * [1] A String
+	            			 * [2] A Number as a String
+	            			 * [3] A Boolean as a String
+	            			 * [4] A JsonObject as a string
+	            			 * [5] A JsonArray as a string
+	            			 */
+	            			String inlineText = ((String)inlineKeyObj).trim();
+	            				
+	            			//check if in-line text may contain a json-array or json-object        			
+	                		if((inlineText.startsWith("{") && inlineText.endsWith("}")) || 
+	                				(inlineText.startsWith("[") && inlineText.endsWith("]"))) {	
+	                			// if yes, try to convert
+	                			sourceJsonElement = EIPUtils.getRootJSONObject(inlineText);
+	                			if (sourceJsonElement == null) {
+	                				sourceJsonElement = inlineText;
+	                			}
+	                		} else if (inlineText.startsWith("\"") && inlineText.endsWith("\"")) {
+	                			// if inlineText contains beginning-and-ending-double-quotes, 
+	                			// it will be considered as a string
+	            				sourceJsonElement = inlineText = inlineText.substring(1, inlineText.length()-1);
+	            			} else {
+		                    		if (Source.isNumeric(inlineText)) {
+		                    			sourceJsonElement = new Double(inlineText);
+		                    		} else if ("true".equals(inlineText.toLowerCase()) || 
+		                    				"false".equals(inlineText.toLowerCase())) {
+		                    			sourceJsonElement = new Boolean(inlineText);
+		                    		} else if ("null".equals(inlineText.toLowerCase()) || "".equals(inlineText)) {
+		                    			sourceJsonElement = null;
+		                    		} else {
+		                    			sourceJsonElement = inlineText;
+		                    		}
+	                		}
+	            		}
+        		} else {
         			sourceJsonElement = null;
         		}
         	} else {
-                synLog.error("Error executing Source-type 'inline' : Inline Source Content Definition is not valid");
-                executionStatus.put("errorsExistInSrcTag", true);
-            }
+                	synLog.error("Error executing Source-type 'inline' : Inline Source Content Definition is not valid");
+                	executionStatus.put("errorsExistInSrcTag", true);
+            	}
         }  	
-    	
     	executionStatus.put("evaluatedSrcJsonElement", sourceJsonElement);
         return executionStatus;
     }
     
-	/**
-	 * This method will check if a given string is a number 
-	 * representation or not
-	 * @param str - Input string
-	 * @return a boolean
-	 */
+    /**
+     * This method will check if a given string is a number representation or not.
+     * 
+     * @param str - Input string
+     * @return a boolean
+     */
     private static boolean isNumeric(String str) {  
-    	try{  
+    	try {  
     		Double.parseDouble(str);
-    	}catch(NumberFormatException e){  
-    	    return false;  
+    	} catch (NumberFormatException e){  
+    	    	return false;  
     	}  
     	return true;  
     }
