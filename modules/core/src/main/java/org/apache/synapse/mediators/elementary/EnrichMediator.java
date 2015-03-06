@@ -1,21 +1,21 @@
 /*
- *  Licensed to the Apache Software Foundation (ASF) under one
- *  or more contributor license agreements.  See the NOTICE file
- *  distributed with this work for additional information
- *  regarding copyright ownership.  The ASF licenses this file
- *  to you under the Apache License, Version 2.0 (the
- *  "License"); you may not use this file except in compliance
- *  with the License.  You may obtain a copy of the License at
+ * Copyright (c) 2014, WSO2 Inc. (http://www.wso2.org) All Rights Reserved.
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ * WSO2 Inc. licenses this file to you under the Apache License,
+ * Version 2.0 (the "License"); you may not use this file
+ * except in compliance with the License.
+ * You may obtain a copy of the License at
  *
- *  Unless required by applicable law or agreed to in writing,
- *  software distributed under the License is distributed on an
- *   * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- *  KIND, either express or implied.  See the License for the
- *  specific language governing permissions and limitations
- *  under the License.
+ * 	    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
+ * either express or implied. See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
  */
+ 
 package org.apache.synapse.mediators.elementary;
 
 import org.apache.axiom.om.OMNode;
@@ -76,16 +76,15 @@ public class EnrichMediator extends AbstractMediator {
 
         if (synLog.isTraceOrDebugEnabled()) {
             synLog.traceOrDebug("Start : Enrich mediator");
-
             if (synLog.isTraceTraceEnabled()) {
                 synLog.traceTrace("Message : " + synCtx.getEnvelope());
             }
         }
         
-        if(this.isNativeJsonSupportEnabled(synCtx)) {
-        	HashMap<String, Object> sourceEvaluationStatus = null;
+        if (this.isNativeJsonSupportEnabled(synCtx)) {
+            HashMap<String, Object> sourceEvaluationStatus = null;
             try {
-            	/** returning the message block to be used for enriching */
+            	// returning the message block to be used for enriching
             	sourceEvaluationStatus = source.evaluateJson(synCtx, synLog);
             } catch (JaxenException e) {
             	handleException("JaxenException : ", e, synCtx);
@@ -93,8 +92,8 @@ public class EnrichMediator extends AbstractMediator {
             if (sourceEvaluationStatus.get("errorsExistInSrcTag").equals(true)) {
                 handleException("Errors do exist in enrich source tag definition, unable to proceed : ", synCtx);
             } else {
-            	/** synCtx: Current Message Context,
-            	evaluatedSrcJsonElement: Json Element to be used for enriching */
+            	// synCtx: Current Message Context
+            	// evaluatedSrcJsonElement: Json Element to be used for enriching
                 try {
                 	target.insertJson(synCtx, sourceEvaluationStatus.get("evaluatedSrcJsonElement"), synLog);               
                 } catch (JaxenException e) {
@@ -102,15 +101,15 @@ public class EnrichMediator extends AbstractMediator {
                 }
             }
         } else {
-        	ArrayList<OMNode> sourceNodeList;
+            ArrayList<OMNode> sourceNodeList;
             try {
-            	/** returning the message block to be used for enriching */
+            	// returning the message block to be used for enriching
                 sourceNodeList = source.evaluate(synCtx, synLog);
                 if (sourceNodeList == null) {
                     handleException("Failed to get the source for Enriching : ", synCtx);
                 } else {
-                	/** synCtx: Current Message Context,
-                	sourceNodeList: Message part to be enriched from the in.message */
+                    // synCtx: Current Message Context
+                    // sourceNodeList: Message part to be enriched from the in.message
                     target.insert(synCtx, sourceNodeList, synLog);
                 }
             } catch (JaxenException e) {
@@ -123,13 +122,12 @@ public class EnrichMediator extends AbstractMediator {
     }
     
     /**
-     * This method verifies whether the existing message payload should be treated with native json support or not
+     * This method verifies whether the existing message payload should be treated with native json support or not.
      * @param synCtx Message Context
      * @return True or false depending on whether native json support is enabled or not
      */
     private boolean isNativeJsonSupportEnabled(MessageContext synCtx) {
-    	
-    	/** Check whether the current message context has a json payload or not... */
+    	// Check whether the current message context has a json payload or not
         boolean currentMsgPayloadIsJson = 
         		JsonUtil.hasAJsonPayload(((Axis2MessageContext)synCtx).getAxis2MessageContext());
               
@@ -150,8 +148,7 @@ public class EnrichMediator extends AbstractMediator {
         	targetHasACustomJsonPath = targetPathIsJson;
         }
         
-        /** conditions where native-json-processing is supported... */
-        
+        // conditions where native-json-processing is supported
         boolean cndt1IsTrue = false, cndt2IsTrue = false, cndt3IsTrue = false, cndt4IsTrue = false;
         cndt1IsTrue = (currentMsgPayloadIsJson && !enrichHasCustom);
         cndt2IsTrue = (currentMsgPayloadIsJson && sourceHasACustomJsonPath && !targetHasCustom);
